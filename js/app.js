@@ -1,6 +1,6 @@
 import { DB } from "./db.js";
 import { readFile, guessMapping, buildSalesRecords, buildTargetRecords } from "./parse.js";
-import { filterSales, filterTargets, aggregateByPerson, aggregateByStore, totals, previousPeriod, nextPeriod, generateInsights } from "./insights.js";
+import { filterSales, filterTargets, aggregateByPerson, aggregateByStore, totals, previousPeriod, nextPeriod, generateInsights, sumActual } from "./insights.js";
 import { renderTrendChart } from "./charts.js";
 
 /* ============ State ============ */
@@ -10,6 +10,7 @@ const state = {
   uploads: [],
   store: "__all__",
   period: "__all__",
+  metric: "amount", // "amount" (₹ sale value) or "qty" (units sold) — which basis targets are measured on
   growthRate: 10,
   peopleSort: { key: "actual", dir: "desc" },
   pendingMap: null // { type: 'sales'|'targets', headers, rows, fields }
@@ -19,6 +20,8 @@ const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 
 const inr = (n) => "\u20B9" + Math.round(n || 0).toLocaleString("en-IN");
+const qtyFmt = (n) => Math.round(n || 0).toLocaleString("en-IN") + " pcs";
+const fmtVal = (n, metric = state.metric) => metric === "qty" ? qtyFmt(n) : inr(n);
 const pct = (n) => (n === null || n === undefined) ? "\u2014" : Math.round(n) + "%";
 
 function toast(msg){
@@ -36,6 +39,8 @@ async function boot(){
   state.uploads = await DB.getAllUploads();
   state.growthRate = await DB.getMeta("growthRate", 10);
   $("#growthRate").value = state.growthRate;
+  state.metric = await DB.getMeta("metric", "amount");
+  $("#filterMetric").value = state.metric;
 
   wireNav();
   wireTopbar();
@@ -95,6 +100,11 @@ function refreshFilters(){
 function wireTopbar(){
   $("#filterStore").addEventListener("change", (e) => { state.store = e.target.value; renderAll(); });
   $("#filterPeriod").addEventListener("change", (e) => { state.period = e.target.value; renderAll(); });
+  $("#filterMetric").addEventListener("change", async (e) => {
+    state.metric = e.target.value;
+    await DB.setMeta("metric", state.metric);
+    renderAll();
+  });
   $("#quickUploadBtn").addEventListener("click", () => { goToView("data"); $("#fileInput").click(); });
   $("#exportBtn").addEventListener("click", exportData);
 }
@@ -124,8 +134,8 @@ function renderDashboard(){
   $("#dashboardBody").classList.toggle("hidden", !hasData);
   if (!hasData) return;
 
-  const personRows = aggregateByPerson(sales, targets);
-  const storeRows = aggregateByStore(sales, targets);
+  const personRows = aggregateByPerson(sales, targets, state.metric);
+  const storeRows = aggregateByStore(sales, targets, state.metric);
   const t = totals(personRows);
   const achvPct = t.target ? (t.actual / t.target) * 100 : null;
 
@@ -134,9 +144,9 @@ function renderDashboard(){
   const clamped = Math.max(0, Math.min(100, achvPct ?? 0));
   $("#heroRingFill").style.strokeDashoffset = String(circumference * (1 - clamped / 100));
   $("#heroRingPct").textContent = achvPct === null ? "\u2014" : pct(achvPct);
-  $("#heroAchieved").textContent = inr(t.actual);
-  $("#heroTarget").textContent = t.target ? inr(t.target) : "Not set";
-  $("#heroGap").textContent = t.target ? inr(Math.max(0, t.target - t.actual)) : "\u2014";
+  $("#heroAchieved").textContent = fmtVal(t.actual);
+  $("#heroTarget").textContent = t.target ? fmtVal(t.target) : "Not set";
+  $("#heroGap").textContent = t.target ? fmtVal(Math.max(0, t.target - t.actual)) : "\u2014";
 
   const withTarget = personRows.filter(r => r.target > 0);
   $("#statAbove").textContent = withTarget.filter(r => r.achv >= 100).length;
@@ -148,7 +158,7 @@ function renderDashboard(){
   const prev = previousPeriod(state.period);
   if (prev){
     const prevSales = filterSales(state.sales, state.store, prev);
-    const prevTotal = prevSales.reduce((a, r) => a + r.amount, 0);
+    const prevTotal = sumActual(prevSales, state.metric);
     if (prevTotal > 0){
       const delta = ((t.actual - prevTotal) / prevTotal) * 100;
       $("#statVsPrev").textContent = (delta >= 0 ? "+" : "") + Math.round(delta) + "%";
@@ -207,7 +217,7 @@ function rowToPersonTr(r){
 function renderPeople(){
   const sales = filterSales(state.sales, state.store, state.period);
   const targets = filterTargets(state.targets, state.store, state.period);
-  let rows = aggregateByPerson(sales, targets);
+  let rows = aggregateByPerson(sales, targets, state.metric);
 
   const q = $("#peopleSearch").value.trim().toLowerCase();
   if (q) rows = rows.filter(r => r.salesperson.toLowerCase().includes(q));
@@ -225,8 +235,8 @@ function renderPeople(){
     <tr data-name="${escapeAttr(r.salesperson)}" data-store="${escapeAttr(r.store)}">
       <td>${escapeHtml(r.salesperson)}</td>
       <td>${escapeHtml(r.store)}</td>
-      <td>${inr(r.actual)}</td>
-      <td>${r.target ? inr(r.target) : "\u2014"}</td>
+      <td>${fmtVal(r.actual)}</td>
+      <td>${r.target ? fmtVal(r.target) : "\u2014"}</td>
       <td>${r.target ? `<span class="tag ${r.achv >= 100 ? "tag-good" : r.achv >= 80 ? "tag-mid" : "tag-bad"}">${pct(r.achv)}</span>` : "\u2014"}</td>
       <td>${r.bills || "\u2014"}</td>
       <td>${r.avgBill ? inr(r.avgBill) : "\u2014"}</td>
@@ -255,13 +265,13 @@ function wirePeopleView(){
 /* ============ Drawer (salesperson detail) ============ */
 function openDrawer(name, store){
   const personSales = state.sales.filter(r => r.salesperson === name && r.store === store);
-  const personTargets = state.targets.filter(r => r.salesperson === name && r.store === store);
+  const personTargets = state.targets.filter(r => r.salesperson === name && r.store === store && (r.metric || "amount") === state.metric);
   const periods = [...new Set([...personSales.map(r => r.period), ...personTargets.map(r => r.period)])].sort();
 
   $("#drawerName").textContent = `${name} \u00B7 ${store}`;
   const points = periods.map(p => ({
     label: p,
-    actual: personSales.filter(r => r.period === p).reduce((a, r) => a + r.amount, 0),
+    actual: sumActual(personSales.filter(r => r.period === p), state.metric),
     target: personTargets.filter(r => r.period === p).reduce((a, r) => a + r.target, 0)
   }));
 
@@ -271,8 +281,8 @@ function openDrawer(name, store){
   const body = $("#drawerBody");
   body.innerHTML = `
     <div class="hero-stats" style="grid-template-columns: 1fr 1fr 1fr; margin-bottom:18px;">
-      <div class="stat-card"><span class="stat-label">Total sales</span><span class="stat-val">${inr(totalActual)}</span></div>
-      <div class="stat-card"><span class="stat-label">Total target</span><span class="stat-val">${totalTarget ? inr(totalTarget) : "\u2014"}</span></div>
+      <div class="stat-card"><span class="stat-label">Total actual</span><span class="stat-val">${fmtVal(totalActual)}</span></div>
+      <div class="stat-card"><span class="stat-label">Total target</span><span class="stat-val">${totalTarget ? fmtVal(totalTarget) : "\u2014"}</span></div>
       <div class="stat-card"><span class="stat-label">Achievement</span><span class="stat-val">${totalTarget ? pct((totalActual / totalTarget) * 100) : "\u2014"}</span></div>
     </div>
     <h4 style="font-size:13.5px;margin-bottom:8px;">Period trend</h4>
@@ -284,8 +294,8 @@ function openDrawer(name, store){
         ${points.slice().reverse().map(p => `
           <tr>
             <td>${formatPeriod(p.label)}</td>
-            <td>${inr(p.actual)}</td>
-            <td>${p.target ? inr(p.target) : "\u2014"}</td>
+            <td>${fmtVal(p.actual)}</td>
+            <td>${p.target ? fmtVal(p.target) : "\u2014"}</td>
             <td>${p.target ? pct((p.actual / p.target) * 100) : "\u2014"}</td>
           </tr>`).join("")}
       </tbody>
@@ -299,19 +309,17 @@ function openDrawer(name, store){
 function renderTargets(){
   const sales = filterSales(state.sales, state.store, state.period);
   const targets = filterTargets(state.targets, state.store, state.period);
-  const rows = aggregateByPerson(sales, targets).filter(r => r.target > 0 || r.actual > 0);
+  const rows = aggregateByPerson(sales, targets, state.metric).filter(r => r.target > 0 || r.actual > 0);
 
   $("#targetsEmpty").classList.toggle("hidden", rows.length > 0);
   $("#targetsTable tbody").innerHTML = rows.map(r => {
-    const period = state.period === "__all__" ? "" : state.period;
-    const key = `${r.store}|${r.salesperson}|${period}`;
     return `
     <tr>
       <td>${escapeHtml(r.salesperson)}</td>
       <td>${escapeHtml(r.store)}</td>
       <td>${state.period === "__all__" ? "All periods" : formatPeriod(state.period)}</td>
-      <td>${inr(r.actual)}</td>
-      <td><input type="number" class="target-input" data-store="${escapeAttr(r.store)}" data-name="${escapeAttr(r.salesperson)}" value="${r.target || ""}" placeholder="Set target" ${state.period === "__all__" ? "disabled title=\"Pick a specific period to edit\"" : ""}></td>
+      <td>${fmtVal(r.actual)}</td>
+      <td><input type="number" class="target-input" data-store="${escapeAttr(r.store)}" data-name="${escapeAttr(r.salesperson)}" value="${r.target || ""}" placeholder="${state.metric === "qty" ? "Set qty target" : "Set \u20B9 target"}" ${state.period === "__all__" ? "disabled title=\"Pick a specific period to edit\"" : ""}></td>
       <td>${r.target ? `<span class="tag ${r.achv >= 100 ? "tag-good" : r.achv >= 80 ? "tag-mid" : "tag-bad"}">${pct(r.achv)}</span>` : "\u2014"}</td>
       <td></td>
     </tr>`;
@@ -322,8 +330,8 @@ function renderTargets(){
       const val = Number(e.target.value);
       if (!val || state.period === "__all__") return;
       const store = e.target.dataset.store, salesperson = e.target.dataset.name;
-      const key = `${store}|${salesperson}|${state.period}`;
-      await DB.putTargets([{ key, store, salesperson, period: state.period, target: val }]);
+      const key = `${store}|${salesperson}|${state.period}|${state.metric}`;
+      await DB.putTargets([{ key, store, salesperson, period: state.period, target: val, metric: state.metric }]);
       state.targets = await DB.getAllTargets();
       toast("Target saved");
       renderAll();
@@ -341,10 +349,10 @@ function wireTargetsView(){
     if (!store) return;
     const salesperson = prompt("Salesperson name:");
     if (!salesperson) return;
-    const target = Number(prompt("Target amount (\u20B9):"));
+    const target = Number(prompt(state.metric === "qty" ? "Target quantity (pcs):" : "Target amount (\u20B9):"));
     if (!target) return;
-    const key = `${store.trim()}|${salesperson.trim()}|${state.period}`;
-    await DB.putTargets([{ key, store: store.trim(), salesperson: salesperson.trim(), period: state.period, target }]);
+    const key = `${store.trim()}|${salesperson.trim()}|${state.period}|${state.metric}`;
+    await DB.putTargets([{ key, store: store.trim(), salesperson: salesperson.trim(), period: state.period, target, metric: state.metric }]);
     state.targets = await DB.getAllTargets();
     refreshFilters();
     renderAll();
@@ -378,17 +386,18 @@ function openSuggestModal(){
 
   const sales = filterSales(state.sales, state.store, basePeriod);
   const targets = filterTargets(state.targets, state.store, basePeriod);
-  const rows = aggregateByPerson(sales, targets).filter(r => r.actual > 0);
+  const rows = aggregateByPerson(sales, targets, state.metric).filter(r => r.actual > 0);
   const growth = state.growthRate / 100;
   const next = nextPeriod(basePeriod);
+  const roundTo = state.metric === "qty" ? 1 : 100;
 
-  $("#suggestHint").textContent = `Based on ${formatPeriod(basePeriod)} actuals with a ${state.growthRate}% growth assumption, saved as targets for ${formatPeriod(next)}.`;
+  $("#suggestHint").textContent = `Based on ${formatPeriod(basePeriod)} actuals (${state.metric === "qty" ? "units sold" : "sale value"}) with a ${state.growthRate}% growth assumption, saved as targets for ${formatPeriod(next)}.`;
   $("#suggestTable tbody").innerHTML = rows.map((r, i) => {
-    const suggested = Math.round((r.actual * (1 + growth)) / 100) * 100;
+    const suggested = Math.round((r.actual * (1 + growth)) / roundTo) * roundTo;
     return `<tr data-store="${escapeAttr(r.store)}" data-name="${escapeAttr(r.salesperson)}">
       <td>${escapeHtml(r.salesperson)}</td>
       <td>${escapeHtml(r.store)}</td>
-      <td>${inr(r.actual)}</td>
+      <td>${fmtVal(r.actual)}</td>
       <td><input type="number" class="suggest-input" data-idx="${i}" value="${suggested}"></td>
     </tr>`;
   }).join("");
@@ -427,19 +436,21 @@ const SALES_FIELDS = [
   { key: "qty", label: "Quantity", required: false },
   { key: "bill", label: "Bill / invoice no.", required: false }
 ];
-const TARGET_FIELDS = [
-  { key: "store", label: "Store / branch", required: false },
-  { key: "salesperson", label: "Salesperson", required: true },
-  { key: "period", label: "Period / month", required: true },
-  { key: "target", label: "Target amount", required: true }
-];
+function targetFields(){
+  return [
+    { key: "store", label: "Store / branch", required: false },
+    { key: "salesperson", label: "Salesperson", required: true },
+    { key: "period", label: "Period / month", required: true },
+    { key: "target", label: state.metric === "qty" ? "Target quantity (pcs)" : "Target amount (\u20B9)", required: true }
+  ];
+}
 
 async function handleFileForMapping(file, type){
   if (!file) return;
   try {
     const { headers, rows } = await readFile(file);
     if (!rows.length){ toast("That file looks empty"); return; }
-    const fields = type === "sales" ? SALES_FIELDS : TARGET_FIELDS;
+    const fields = type === "sales" ? SALES_FIELDS : targetFields();
     const mapping = guessMapping(headers, fields.map(f => f.key));
     state.pendingMap = { type, file, headers, rows, fields, mapping };
     openMapModal();
@@ -454,7 +465,7 @@ function openMapModal(){
   $("#mapModalTitle").textContent = type === "sales" ? "Match your sales columns" : "Match your target columns";
   $("#mapModalHint").textContent = type === "sales"
     ? "Tell Ledger which column in your file is which. Date, salesperson and amount are required."
-    : "Tell Ledger which column holds each value. Salesperson, period and target are required.";
+    : `Tell Ledger which column holds each value. Salesperson, period and target are required. These will be saved as ${state.metric === "qty" ? "quantity (pcs)" : "sale value (\u20B9)"} targets — switch \u201CMeasure targets in\u201D at the top first if that's not right.`;
 
   $("#mapGrid").innerHTML = fields.map(f => `
     <div class="map-item">
@@ -524,7 +535,7 @@ async function confirmMapping(){
     state.uploads = await DB.getAllUploads();
     toast(`Added ${records.length} sales records${skipped ? ` (${skipped} skipped)` : ""}`);
   } else {
-    const { records, skipped } = buildTargetRecords(rows, mapping);
+    const { records, skipped } = buildTargetRecords(rows, mapping, state.metric);
     if (!records.length){
       toast("No valid target rows found — check the column mapping");
       closeMapModal();
@@ -548,7 +559,7 @@ async function confirmSuggestedTargets(){
     const store = tr.dataset.store, salesperson = tr.dataset.name;
     const val = Number(tr.querySelector(".suggest-input").value) || 0;
     if (val > 0){
-      rows.push({ key: `${store}|${salesperson}|${next}`, store, salesperson, period: next, target: val });
+      rows.push({ key: `${store}|${salesperson}|${next}|${state.metric}`, store, salesperson, period: next, target: val, metric: state.metric });
     }
   });
   if (!rows.length){ $("#suggestModalBackdrop").classList.add("hidden"); return; }
@@ -623,7 +634,7 @@ function exportData(){
     downloadBlob(toCSV(state.sales, ["date", "period", "store", "salesperson", "amount", "qty", "bill"]), "sales_export.csv");
   }
   if (state.targets.length){
-    downloadBlob(toCSV(state.targets, ["store", "salesperson", "period", "target"]), "targets_export.csv");
+    downloadBlob(toCSV(state.targets, ["store", "salesperson", "period", "target", "metric"]), "targets_export.csv");
   }
   toast("Export started");
 }

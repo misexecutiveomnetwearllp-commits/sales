@@ -15,23 +15,38 @@ export function filterTargets(targets, store, period){
   );
 }
 
+// metric: "amount" (sale value, ₹) or "qty" (units sold). Legacy target rows
+// with no metric saved are treated as "amount" targets for backward compatibility.
+function targetMatchesMetric(t, metric){
+  return (t.metric || "amount") === metric;
+}
+function actualFor(r, metric){
+  return metric === "qty" ? (r.qty || 0) : r.amount;
+}
+
+export function sumActual(salesRows, metric = "amount"){
+  return salesRows.reduce((a, r) => a + actualFor(r, metric), 0);
+}
+
 // Groups by salesperson+store (collapsing period when period === "__all__")
-export function aggregateByPerson(sales, targets){
+export function aggregateByPerson(sales, targets, metric = "amount"){
   const map = new Map(); // key = store|salesperson
   for (const r of sales){
     const key = `${r.store}|${r.salesperson}`;
     if (!map.has(key)){
-      map.set(key, { store: r.store, salesperson: r.salesperson, actual: 0, target: 0, qty: 0, bills: new Set() });
+      map.set(key, { store: r.store, salesperson: r.salesperson, actual: 0, target: 0, saleValue: 0, qty: 0, bills: new Set() });
     }
     const row = map.get(key);
-    row.actual += r.amount;
+    row.actual += actualFor(r, metric);
+    row.saleValue += r.amount;
     row.qty += r.qty || 0;
     if (r.bill) row.bills.add(r.bill);
   }
   for (const t of targets){
+    if (!targetMatchesMetric(t, metric)) continue;
     const key = `${t.store}|${t.salesperson}`;
     if (!map.has(key)){
-      map.set(key, { store: t.store, salesperson: t.salesperson, actual: 0, target: 0, qty: 0, bills: new Set() });
+      map.set(key, { store: t.store, salesperson: t.salesperson, actual: 0, target: 0, saleValue: 0, qty: 0, bills: new Set() });
     }
     map.get(key).target += t.target;
   }
@@ -41,20 +56,21 @@ export function aggregateByPerson(sales, targets){
     actual: r.actual,
     target: r.target,
     bills: r.bills.size,
-    avgBill: r.bills.size ? r.actual / r.bills.size : 0,
+    avgBill: r.bills.size ? r.saleValue / r.bills.size : 0,
     achv: r.target ? (r.actual / r.target) * 100 : null
   }));
   rows.sort((a, b) => b.actual - a.actual);
   return rows;
 }
 
-export function aggregateByStore(sales, targets){
+export function aggregateByStore(sales, targets, metric = "amount"){
   const map = new Map();
   for (const r of sales){
     if (!map.has(r.store)) map.set(r.store, { store: r.store, actual: 0, target: 0 });
-    map.get(r.store).actual += r.amount;
+    map.get(r.store).actual += actualFor(r, metric);
   }
   for (const t of targets){
+    if (!targetMatchesMetric(t, metric)) continue;
     if (!map.has(t.store)) map.set(t.store, { store: t.store, actual: 0, target: 0 });
     map.get(t.store).target += t.target;
   }

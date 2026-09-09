@@ -115,8 +115,9 @@ export function buildSalesRecords(rows, mapping, uploadId){
   return { records: out, skipped };
 }
 
-// Normalize raw rows into target records using confirmed mapping
-export function buildTargetRecords(rows, mapping){
+// Normalize raw rows into target records using confirmed mapping.
+// metric: "amount" (₹ sales value) or "qty" (units) — which basis this batch of targets is set on.
+export function buildTargetRecords(rows, mapping, metric = "amount"){
   const out = [];
   let skipped = 0;
   for (const row of rows){
@@ -129,11 +130,12 @@ export function buildTargetRecords(rows, mapping){
     if (asDate) period = toPeriod(asDate);
     if (!salesperson || !target || !period){ skipped++; continue; }
     out.push({
-      key: `${store}|${salesperson}|${period}`,
+      key: `${store}|${salesperson}|${period}|${metric}`,
       store: store || "Main",
       salesperson,
       period,
-      target
+      target,
+      metric
     });
   }
   return { records: out, skipped };

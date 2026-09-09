@@ -52,6 +52,22 @@ replacing anything. If you need to undo an upload, remove it from the
 **Upload history** table on the Data tab — that removes exactly the rows
 that came from that file.
 
+## Sale value vs quantity targets
+
+At the top of the page, **"Measure targets in"** switches the whole site
+between two bases:
+
+- **Sale value (₹)** — targets and achievement are based on rupee sales.
+- **Quantity (pcs)** — targets and achievement are based on units sold
+  (pulled from the optional Quantity column you map on upload).
+
+Everything — the dashboard ring, store bars, the Targets tab, target
+imports, and "Suggest next-period targets" — follows whichever basis is
+selected. Amount-based and quantity-based targets are stored separately, so
+switching back and forth doesn't overwrite either one; set both if you track
+both. If your ERP export doesn't include a quantity column, map it in when
+uploading (Data tab → column mapping) to unlock quantity targets.
+
 ## Setting targets
 
 On the **Targets** tab, with a specific month selected in the top-right

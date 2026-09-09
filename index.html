@@ -54,6 +54,13 @@
           <span>Period</span>
           <select id="filterPeriod"><option value="__all__">All periods</option></select>
         </label>
+        <label class="field">
+          <span>Measure targets in</span>
+          <select id="filterMetric">
+            <option value="amount">Sale value (&#8377;)</option>
+            <option value="qty">Quantity (pcs)</option>
+          </select>
+        </label>
       </div>
       <div class="topbar-actions">
         <button class="btn btn-ghost" id="exportBtn">Export data</button>
@@ -179,7 +186,7 @@
             <tr>
               <th data-sort="name">Salesperson</th>
               <th data-sort="store">Store</th>
-              <th data-sort="actual">Sales</th>
+              <th data-sort="actual">Actual</th>
               <th data-sort="target">Target</th>
               <th data-sort="achv">Achv. %</th>
               <th data-sort="bills">Bills</th>
