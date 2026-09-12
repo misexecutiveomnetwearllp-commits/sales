@@ -1,6 +1,3 @@
-// Aggregates sales + targets by salesperson (within a store/period filter),
-// and generates plain-language insights.
-
 export function filterSales(sales, store, period){
   return sales.filter(r =>
     (store === "__all__" || r.store === store) &&
@@ -15,38 +12,26 @@ export function filterTargets(targets, store, period){
   );
 }
 
-// metric: "amount" (sale value, ₹) or "qty" (units sold). Legacy target rows
-// with no metric saved are treated as "amount" targets for backward compatibility.
-function targetMatchesMetric(t, metric){
-  return (t.metric || "amount") === metric;
-}
-function actualFor(r, metric){
-  return metric === "qty" ? (r.qty || 0) : r.amount;
-}
-
-export function sumActual(salesRows, metric = "amount"){
-  return salesRows.reduce((a, r) => a + actualFor(r, metric), 0);
+export function sumQty(salesRows){
+  return salesRows.reduce((a, r) => a + (r.qty || 0), 0);
 }
 
 // Groups by salesperson+store (collapsing period when period === "__all__")
-export function aggregateByPerson(sales, targets, metric = "amount"){
+export function aggregateByPerson(sales, targets){
   const map = new Map(); // key = store|salesperson
   for (const r of sales){
     const key = `${r.store}|${r.salesperson}`;
     if (!map.has(key)){
-      map.set(key, { store: r.store, salesperson: r.salesperson, actual: 0, target: 0, saleValue: 0, qty: 0, bills: new Set() });
+      map.set(key, { store: r.store, salesperson: r.salesperson, actual: 0, target: 0, bills: new Set() });
     }
     const row = map.get(key);
-    row.actual += actualFor(r, metric);
-    row.saleValue += r.amount;
-    row.qty += r.qty || 0;
+    row.actual += r.qty || 0;
     if (r.bill) row.bills.add(r.bill);
   }
   for (const t of targets){
-    if (!targetMatchesMetric(t, metric)) continue;
     const key = `${t.store}|${t.salesperson}`;
     if (!map.has(key)){
-      map.set(key, { store: t.store, salesperson: t.salesperson, actual: 0, target: 0, saleValue: 0, qty: 0, bills: new Set() });
+      map.set(key, { store: t.store, salesperson: t.salesperson, actual: 0, target: 0, bills: new Set() });
     }
     map.get(key).target += t.target;
   }
@@ -56,21 +41,20 @@ export function aggregateByPerson(sales, targets, metric = "amount"){
     actual: r.actual,
     target: r.target,
     bills: r.bills.size,
-    avgBill: r.bills.size ? r.saleValue / r.bills.size : 0,
+    avgPerBill: r.bills.size ? r.actual / r.bills.size : 0,
     achv: r.target ? (r.actual / r.target) * 100 : null
   }));
   rows.sort((a, b) => b.actual - a.actual);
   return rows;
 }
 
-export function aggregateByStore(sales, targets, metric = "amount"){
+export function aggregateByStore(sales, targets){
   const map = new Map();
   for (const r of sales){
     if (!map.has(r.store)) map.set(r.store, { store: r.store, actual: 0, target: 0 });
-    map.get(r.store).actual += actualFor(r, metric);
+    map.get(r.store).actual += r.qty || 0;
   }
   for (const t of targets){
-    if (!targetMatchesMetric(t, metric)) continue;
     if (!map.has(t.store)) map.set(t.store, { store: t.store, actual: 0, target: 0 });
     map.get(t.store).target += t.target;
   }
@@ -87,7 +71,6 @@ export function totals(rows){
   }, { actual: 0, target: 0 });
 }
 
-// previous period string, e.g. 2026-08 -> 2026-07
 export function previousPeriod(period){
   if (period === "__all__") return null;
   const [y, m] = period.split("-").map(Number);
@@ -110,7 +93,7 @@ export function generateInsights(personRows, storeRows, growthRatePct){
 
   if (below80.length){
     const names = below80.slice(0, 4).map(r => r.salesperson).join(", ");
-    insights.push(`${below80.length} salesperson${below80.length > 1 ? "s are" : " is"} under 80% of target — start with ${names}. A short floor-coaching session on add-on selling and billing conversion usually moves this fastest.`);
+    insights.push(`${below80.length} salesperson${below80.length > 1 ? "s are" : " is"} under 80% of their unit target — start with ${names}. A short floor-coaching session on add-on selling and billing conversion usually moves this fastest.`);
   }
   if (above100.length){
     const top = above100[0];

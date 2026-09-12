@@ -1,6 +1,12 @@
-import { DB } from "./db.js";
-import { readFile, guessMapping, buildSalesRecords, buildTargetRecords } from "./parse.js";
-import { filterSales, filterTargets, aggregateByPerson, aggregateByStore, totals, previousPeriod, nextPeriod, generateInsights, sumActual } from "./insights.js";
+import { DB, setApiUrl, getApiUrl, isConfigured } from "./api.js";
+import {
+  readFileMatrix, detectHeaderRow, extractHeaders, extractDataRows, rowPreviewLabel,
+  guessMapping, buildSalesRecords, buildTargetRecords
+} from "./parse.js";
+import {
+  filterSales, filterTargets, aggregateByPerson, aggregateByStore, totals,
+  previousPeriod, nextPeriod, generateInsights, sumQty
+} from "./insights.js";
 import { renderTrendChart } from "./charts.js";
 
 /* ============ State ============ */
@@ -10,18 +16,16 @@ const state = {
   uploads: [],
   store: "__all__",
   period: "__all__",
-  metric: "amount", // "amount" (₹ sale value) or "qty" (units sold) — which basis targets are measured on
   growthRate: 10,
   peopleSort: { key: "actual", dir: "desc" },
-  pendingMap: null // { type: 'sales'|'targets', headers, rows, fields }
+  pendingMap: null // { type, file, matrix, headerRowIndex, headers, dataRows, fields, mapping }
 };
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 
-const inr = (n) => "\u20B9" + Math.round(n || 0).toLocaleString("en-IN");
-const qtyFmt = (n) => Math.round(n || 0).toLocaleString("en-IN") + " pcs";
-const fmtVal = (n, metric = state.metric) => metric === "qty" ? qtyFmt(n) : inr(n);
+const fmt = (n) => Math.round(n || 0).toLocaleString("en-IN");
+const fmtPcs = (n) => fmt(n) + " pcs";
 const pct = (n) => (n === null || n === undefined) ? "\u2014" : Math.round(n) + "%";
 
 function toast(msg){
@@ -29,28 +33,65 @@ function toast(msg){
   el.textContent = msg;
   el.classList.add("is-shown");
   clearTimeout(toast._t);
-  toast._t = setTimeout(() => el.classList.remove("is-shown"), 2600);
+  toast._t = setTimeout(() => el.classList.remove("is-shown"), 2800);
 }
 
 /* ============ Boot ============ */
 async function boot(){
-  state.sales = await DB.getAllSales();
-  state.targets = await DB.getAllTargets();
-  state.uploads = await DB.getAllUploads();
-  state.growthRate = await DB.getMeta("growthRate", 10);
-  $("#growthRate").value = state.growthRate;
-  state.metric = await DB.getMeta("metric", "amount");
-  $("#filterMetric").value = state.metric;
-
   wireNav();
   wireTopbar();
   wireUpload();
   wireTargetsView();
   wireDataView();
   wireModals();
+  wireConnection();
+  renderConnectionStatus();
+  await loadData();
+}
 
+async function loadData(){
+  if (!isConfigured()){
+    renderAll();
+    renderDataView();
+    return;
+  }
+  try {
+    state.sales = await DB.getAllSales();
+    state.targets = await DB.getAllTargets();
+    state.uploads = await DB.getAllUploads();
+    state.growthRate = Number(await DB.getMeta("growthRate", 10)) || 10;
+    $("#growthRate").value = state.growthRate;
+  } catch (err){
+    console.error(err);
+    toast("Couldn't reach the backend — check the connection URL on the Data tab");
+  }
   refreshFilters();
   renderAll();
+  renderDataView();
+}
+
+/* ============ Connection (Apps Script URL) ============ */
+function wireConnection(){
+  $("#apiUrlInput").value = getApiUrl();
+  $("#apiUrlSaveBtn").addEventListener("click", async () => {
+    const url = $("#apiUrlInput").value.trim();
+    if (!url){ toast("Paste your Apps Script Web App URL first"); return; }
+    if (!/^https:\/\/script\.google(usercontent)?\.com\//.test(url)){
+      toast("That doesn't look like an Apps Script web app URL");
+      return;
+    }
+    setApiUrl(url);
+    renderConnectionStatus();
+    toast("Connecting\u2026");
+    await loadData();
+  });
+}
+
+function renderConnectionStatus(){
+  const configured = isConfigured();
+  const el = $("#connectionStatus");
+  el.textContent = configured ? "Connected" : "Not connected";
+  el.className = "tag " + (configured ? "tag-good" : "tag-bad");
 }
 
 /* ============ Nav ============ */
@@ -100,12 +141,7 @@ function refreshFilters(){
 function wireTopbar(){
   $("#filterStore").addEventListener("change", (e) => { state.store = e.target.value; renderAll(); });
   $("#filterPeriod").addEventListener("change", (e) => { state.period = e.target.value; renderAll(); });
-  $("#filterMetric").addEventListener("change", async (e) => {
-    state.metric = e.target.value;
-    await DB.setMeta("metric", state.metric);
-    renderAll();
-  });
-  $("#quickUploadBtn").addEventListener("click", () => { goToView("data"); $("#fileInput").click(); });
+  $("#quickUploadBtn").addEventListener("click", () => { goToView("data"); if (isConfigured()) $("#fileInput").click(); });
   $("#exportBtn").addEventListener("click", exportData);
 }
 
@@ -126,16 +162,30 @@ function renderAll(){
 
 /* ============ Dashboard ============ */
 function renderDashboard(){
+  if (!isConfigured()){
+    $("#dashboardEmpty").classList.remove("hidden");
+    $("#dashboardBody").classList.add("hidden");
+    $("#dashboardEmptyTitle").textContent = "Connect your Google Sheet first";
+    $("#dashboardEmptyText").textContent = "Go to the Data tab, paste your Apps Script Web App URL and save — then upload your first sales file. All data lives in that sheet, so it looks the same from any browser or device.";
+    $("#emptyUploadBtn").textContent = "Go to Data tab";
+    return;
+  }
+
   const sales = filterSales(state.sales, state.store, state.period);
   const targets = filterTargets(state.targets, state.store, state.period);
 
   const hasData = state.sales.length > 0;
   $("#dashboardEmpty").classList.toggle("hidden", hasData);
   $("#dashboardBody").classList.toggle("hidden", !hasData);
-  if (!hasData) return;
+  if (!hasData){
+    $("#dashboardEmptyTitle").textContent = "No sales data yet";
+    $("#dashboardEmptyText").textContent = "Upload an Excel or CSV export from your ERP to see achievement against target, store-wise performance, and who needs support to hit the next target.";
+    $("#emptyUploadBtn").textContent = "Upload your first file";
+    return;
+  }
 
-  const personRows = aggregateByPerson(sales, targets, state.metric);
-  const storeRows = aggregateByStore(sales, targets, state.metric);
+  const personRows = aggregateByPerson(sales, targets);
+  const storeRows = aggregateByStore(sales, targets);
   const t = totals(personRows);
   const achvPct = t.target ? (t.actual / t.target) * 100 : null;
 
@@ -144,9 +194,9 @@ function renderDashboard(){
   const clamped = Math.max(0, Math.min(100, achvPct ?? 0));
   $("#heroRingFill").style.strokeDashoffset = String(circumference * (1 - clamped / 100));
   $("#heroRingPct").textContent = achvPct === null ? "\u2014" : pct(achvPct);
-  $("#heroAchieved").textContent = fmtVal(t.actual);
-  $("#heroTarget").textContent = t.target ? fmtVal(t.target) : "Not set";
-  $("#heroGap").textContent = t.target ? fmtVal(Math.max(0, t.target - t.actual)) : "\u2014";
+  $("#heroAchieved").textContent = fmtPcs(t.actual);
+  $("#heroTarget").textContent = t.target ? fmtPcs(t.target) : "Not set";
+  $("#heroGap").textContent = t.target ? fmtPcs(Math.max(0, t.target - t.actual)) : "\u2014";
 
   const withTarget = personRows.filter(r => r.target > 0);
   $("#statAbove").textContent = withTarget.filter(r => r.achv >= 100).length;
@@ -154,11 +204,10 @@ function renderDashboard(){
   const bestStore = [...storeRows].filter(s => s.target > 0).sort((a, b) => b.achv - a.achv)[0];
   $("#statBestStore").textContent = bestStore ? bestStore.store : "\u2014";
 
-  // vs previous period
   const prev = previousPeriod(state.period);
   if (prev){
     const prevSales = filterSales(state.sales, state.store, prev);
-    const prevTotal = sumActual(prevSales, state.metric);
+    const prevTotal = sumQty(prevSales);
     if (prevTotal > 0){
       const delta = ((t.actual - prevTotal) / prevTotal) * 100;
       $("#statVsPrev").textContent = (delta >= 0 ? "+" : "") + Math.round(delta) + "%";
@@ -169,7 +218,6 @@ function renderDashboard(){
     $("#statVsPrev").textContent = "\u2014";
   }
 
-  // Store bars
   const barsEl = $("#storeBars");
   if (!storeRows.length){
     barsEl.innerHTML = `<p class="ledger-empty">No store data for this selection.</p>`;
@@ -186,7 +234,6 @@ function renderDashboard(){
     }).join("");
   }
 
-  // Needs attention / top performers
   const withT = personRows.filter(r => r.target > 0);
   const below80 = [...withT].filter(r => r.achv < 80).sort((a, b) => a.achv - b.achv).slice(0, 6);
   const top = [...withT].sort((a, b) => b.achv - a.achv).slice(0, 6);
@@ -199,7 +246,6 @@ function renderDashboard(){
     tr.addEventListener("click", () => openDrawer(tr.dataset.name, tr.dataset.store));
   });
 
-  // Insights
   const insights = generateInsights(personRows, storeRows, state.growthRate);
   $("#insightsList").innerHTML = insights.map(i => `<li>${escapeHtml(i)}</li>`).join("");
 }
@@ -217,7 +263,7 @@ function rowToPersonTr(r){
 function renderPeople(){
   const sales = filterSales(state.sales, state.store, state.period);
   const targets = filterTargets(state.targets, state.store, state.period);
-  let rows = aggregateByPerson(sales, targets, state.metric);
+  let rows = aggregateByPerson(sales, targets);
 
   const q = $("#peopleSearch").value.trim().toLowerCase();
   if (q) rows = rows.filter(r => r.salesperson.toLowerCase().includes(q));
@@ -235,11 +281,11 @@ function renderPeople(){
     <tr data-name="${escapeAttr(r.salesperson)}" data-store="${escapeAttr(r.store)}">
       <td>${escapeHtml(r.salesperson)}</td>
       <td>${escapeHtml(r.store)}</td>
-      <td>${fmtVal(r.actual)}</td>
-      <td>${r.target ? fmtVal(r.target) : "\u2014"}</td>
+      <td>${fmt(r.actual)}</td>
+      <td>${r.target ? fmt(r.target) : "\u2014"}</td>
       <td>${r.target ? `<span class="tag ${r.achv >= 100 ? "tag-good" : r.achv >= 80 ? "tag-mid" : "tag-bad"}">${pct(r.achv)}</span>` : "\u2014"}</td>
       <td>${r.bills || "\u2014"}</td>
-      <td>${r.avgBill ? inr(r.avgBill) : "\u2014"}</td>
+      <td>${r.avgPerBill ? r.avgPerBill.toFixed(1) : "\u2014"}</td>
     </tr>`).join("");
 
   $$("#peopleTable tbody tr").forEach(tr => {
@@ -265,13 +311,13 @@ function wirePeopleView(){
 /* ============ Drawer (salesperson detail) ============ */
 function openDrawer(name, store){
   const personSales = state.sales.filter(r => r.salesperson === name && r.store === store);
-  const personTargets = state.targets.filter(r => r.salesperson === name && r.store === store && (r.metric || "amount") === state.metric);
+  const personTargets = state.targets.filter(r => r.salesperson === name && r.store === store);
   const periods = [...new Set([...personSales.map(r => r.period), ...personTargets.map(r => r.period)])].sort();
 
   $("#drawerName").textContent = `${name} \u00B7 ${store}`;
   const points = periods.map(p => ({
     label: p,
-    actual: sumActual(personSales.filter(r => r.period === p), state.metric),
+    actual: sumQty(personSales.filter(r => r.period === p)),
     target: personTargets.filter(r => r.period === p).reduce((a, r) => a + r.target, 0)
   }));
 
@@ -281,21 +327,21 @@ function openDrawer(name, store){
   const body = $("#drawerBody");
   body.innerHTML = `
     <div class="hero-stats" style="grid-template-columns: 1fr 1fr 1fr; margin-bottom:18px;">
-      <div class="stat-card"><span class="stat-label">Total actual</span><span class="stat-val">${fmtVal(totalActual)}</span></div>
-      <div class="stat-card"><span class="stat-label">Total target</span><span class="stat-val">${totalTarget ? fmtVal(totalTarget) : "\u2014"}</span></div>
+      <div class="stat-card"><span class="stat-label">Total units sold</span><span class="stat-val">${fmt(totalActual)}</span></div>
+      <div class="stat-card"><span class="stat-label">Total target</span><span class="stat-val">${totalTarget ? fmt(totalTarget) : "\u2014"}</span></div>
       <div class="stat-card"><span class="stat-label">Achievement</span><span class="stat-val">${totalTarget ? pct((totalActual / totalTarget) * 100) : "\u2014"}</span></div>
     </div>
     <h4 style="font-size:13.5px;margin-bottom:8px;">Period trend</h4>
     <div class="drawer-sparkline" id="drawerChart"></div>
     <h4 style="font-size:13.5px;margin:18px 0 8px;">By period</h4>
     <table class="ledger">
-      <thead><tr><th>Period</th><th>Actual</th><th>Target</th><th>Achv.</th></tr></thead>
+      <thead><tr><th>Period</th><th>Units sold</th><th>Target</th><th>Achv.</th></tr></thead>
       <tbody>
         ${points.slice().reverse().map(p => `
           <tr>
             <td>${formatPeriod(p.label)}</td>
-            <td>${fmtVal(p.actual)}</td>
-            <td>${p.target ? fmtVal(p.target) : "\u2014"}</td>
+            <td>${fmt(p.actual)}</td>
+            <td>${p.target ? fmt(p.target) : "\u2014"}</td>
             <td>${p.target ? pct((p.actual / p.target) * 100) : "\u2014"}</td>
           </tr>`).join("")}
       </tbody>
@@ -309,38 +355,42 @@ function openDrawer(name, store){
 function renderTargets(){
   const sales = filterSales(state.sales, state.store, state.period);
   const targets = filterTargets(state.targets, state.store, state.period);
-  const rows = aggregateByPerson(sales, targets, state.metric).filter(r => r.target > 0 || r.actual > 0);
+  const rows = aggregateByPerson(sales, targets).filter(r => r.target > 0 || r.actual > 0);
 
   $("#targetsEmpty").classList.toggle("hidden", rows.length > 0);
-  $("#targetsTable tbody").innerHTML = rows.map(r => {
-    return `
+  $("#targetsTable tbody").innerHTML = rows.map(r => `
     <tr>
       <td>${escapeHtml(r.salesperson)}</td>
       <td>${escapeHtml(r.store)}</td>
       <td>${state.period === "__all__" ? "All periods" : formatPeriod(state.period)}</td>
-      <td>${fmtVal(r.actual)}</td>
-      <td><input type="number" class="target-input" data-store="${escapeAttr(r.store)}" data-name="${escapeAttr(r.salesperson)}" value="${r.target || ""}" placeholder="${state.metric === "qty" ? "Set qty target" : "Set \u20B9 target"}" ${state.period === "__all__" ? "disabled title=\"Pick a specific period to edit\"" : ""}></td>
+      <td>${fmt(r.actual)}</td>
+      <td><input type="number" class="target-input" data-store="${escapeAttr(r.store)}" data-name="${escapeAttr(r.salesperson)}" value="${r.target || ""}" placeholder="Set qty target" ${state.period === "__all__" ? "disabled title=\"Pick a specific period to edit\"" : ""}></td>
       <td>${r.target ? `<span class="tag ${r.achv >= 100 ? "tag-good" : r.achv >= 80 ? "tag-mid" : "tag-bad"}">${pct(r.achv)}</span>` : "\u2014"}</td>
       <td></td>
-    </tr>`;
-  }).join("");
+    </tr>`).join("");
 
   $$(".target-input").forEach(input => {
     input.addEventListener("change", async (e) => {
       const val = Number(e.target.value);
       if (!val || state.period === "__all__") return;
       const store = e.target.dataset.store, salesperson = e.target.dataset.name;
-      const key = `${store}|${salesperson}|${state.period}|${state.metric}`;
-      await DB.putTargets([{ key, store, salesperson, period: state.period, target: val, metric: state.metric }]);
-      state.targets = await DB.getAllTargets();
-      toast("Target saved");
-      renderAll();
+      const key = `${store}|${salesperson}|${state.period}`;
+      try {
+        await DB.putTargets([{ key, store, salesperson, period: state.period, target: val }]);
+        state.targets = await DB.getAllTargets();
+        toast("Target saved");
+        renderAll();
+      } catch (err){
+        console.error(err);
+        toast("Couldn't save — check the connection on the Data tab");
+      }
     });
   });
 }
 
 function wireTargetsView(){
   $("#addTargetRowBtn").addEventListener("click", async () => {
+    if (!isConfigured()){ toast("Connect your Google Sheet first (Data tab)"); return; }
     if (state.period === "__all__"){
       toast("Pick a specific period first, so the target has somewhere to go");
       return;
@@ -349,10 +399,10 @@ function wireTargetsView(){
     if (!store) return;
     const salesperson = prompt("Salesperson name:");
     if (!salesperson) return;
-    const target = Number(prompt(state.metric === "qty" ? "Target quantity (pcs):" : "Target amount (\u20B9):"));
+    const target = Number(prompt("Target quantity (pcs):"));
     if (!target) return;
-    const key = `${store.trim()}|${salesperson.trim()}|${state.period}|${state.metric}`;
-    await DB.putTargets([{ key, store: store.trim(), salesperson: salesperson.trim(), period: state.period, target, metric: state.metric }]);
+    const key = `${store.trim()}|${salesperson.trim()}|${state.period}`;
+    await DB.putTargets([{ key, store: store.trim(), salesperson: salesperson.trim(), period: state.period, target }]);
     state.targets = await DB.getAllTargets();
     refreshFilters();
     renderAll();
@@ -361,12 +411,13 @@ function wireTargetsView(){
 
   $("#growthRate").addEventListener("change", async (e) => {
     state.growthRate = Number(e.target.value) || 0;
-    await DB.setMeta("growthRate", state.growthRate);
+    if (isConfigured()) await DB.setMeta("growthRate", state.growthRate);
     renderAll();
   });
 
   $("#suggestTargetsBtn").addEventListener("click", openSuggestModal);
   $("#importTargetsBtn").addEventListener("click", () => {
+    if (!isConfigured()){ toast("Connect your Google Sheet first (Data tab)"); return; }
     const input = document.createElement("input");
     input.type = "file";
     input.accept = ".csv,.xlsx,.xls";
@@ -386,18 +437,17 @@ function openSuggestModal(){
 
   const sales = filterSales(state.sales, state.store, basePeriod);
   const targets = filterTargets(state.targets, state.store, basePeriod);
-  const rows = aggregateByPerson(sales, targets, state.metric).filter(r => r.actual > 0);
+  const rows = aggregateByPerson(sales, targets).filter(r => r.actual > 0);
   const growth = state.growthRate / 100;
   const next = nextPeriod(basePeriod);
-  const roundTo = state.metric === "qty" ? 1 : 100;
 
-  $("#suggestHint").textContent = `Based on ${formatPeriod(basePeriod)} actuals (${state.metric === "qty" ? "units sold" : "sale value"}) with a ${state.growthRate}% growth assumption, saved as targets for ${formatPeriod(next)}.`;
+  $("#suggestHint").textContent = `Based on ${formatPeriod(basePeriod)} units sold, with a ${state.growthRate}% growth assumption, saved as targets for ${formatPeriod(next)}.`;
   $("#suggestTable tbody").innerHTML = rows.map((r, i) => {
-    const suggested = Math.round((r.actual * (1 + growth)) / roundTo) * roundTo;
+    const suggested = Math.max(1, Math.round(r.actual * (1 + growth)));
     return `<tr data-store="${escapeAttr(r.store)}" data-name="${escapeAttr(r.salesperson)}">
       <td>${escapeHtml(r.salesperson)}</td>
       <td>${escapeHtml(r.store)}</td>
-      <td>${fmtVal(r.actual)}</td>
+      <td>${fmt(r.actual)}</td>
       <td><input type="number" class="suggest-input" data-idx="${i}" value="${suggested}"></td>
     </tr>`;
   }).join("");
@@ -410,8 +460,14 @@ function openSuggestModal(){
 function wireUpload(){
   const dropzone = $("#dropzone");
   const fileInput = $("#fileInput");
-  $("#emptyUploadBtn").addEventListener("click", () => { goToView("data"); fileInput.click(); });
-  dropzone.addEventListener("click", () => fileInput.click());
+  $("#emptyUploadBtn").addEventListener("click", () => {
+    goToView("data");
+    if (isConfigured()) fileInput.click();
+  });
+  dropzone.addEventListener("click", () => {
+    if (!isConfigured()){ toast("Connect your Google Sheet first (see above)"); return; }
+    fileInput.click();
+  });
   fileInput.addEventListener("change", () => {
     if (fileInput.files[0]) handleFileForMapping(fileInput.files[0], "sales");
     fileInput.value = "";
@@ -423,6 +479,7 @@ function wireUpload(){
     dropzone.addEventListener(evt, (e) => { e.preventDefault(); dropzone.classList.remove("is-drag"); })
   );
   dropzone.addEventListener("drop", (e) => {
+    if (!isConfigured()){ toast("Connect your Google Sheet first (see above)"); return; }
     const file = e.dataTransfer.files[0];
     if (file) handleFileForMapping(file, "sales");
   });
@@ -432,27 +489,24 @@ const SALES_FIELDS = [
   { key: "date", label: "Date", required: true },
   { key: "store", label: "Store / branch", required: false },
   { key: "salesperson", label: "Salesperson", required: true },
-  { key: "amount", label: "Sale amount", required: true },
-  { key: "qty", label: "Quantity", required: false },
+  { key: "qty", label: "Quantity sold", required: true },
   { key: "bill", label: "Bill / invoice no.", required: false }
 ];
-function targetFields(){
-  return [
-    { key: "store", label: "Store / branch", required: false },
-    { key: "salesperson", label: "Salesperson", required: true },
-    { key: "period", label: "Period / month", required: true },
-    { key: "target", label: state.metric === "qty" ? "Target quantity (pcs)" : "Target amount (\u20B9)", required: true }
-  ];
-}
+const TARGET_FIELDS = [
+  { key: "store", label: "Store / branch", required: false },
+  { key: "salesperson", label: "Salesperson", required: true },
+  { key: "period", label: "Period / month", required: true },
+  { key: "target", label: "Target quantity (pcs)", required: true }
+];
 
 async function handleFileForMapping(file, type){
   if (!file) return;
   try {
-    const { headers, rows } = await readFile(file);
-    if (!rows.length){ toast("That file looks empty"); return; }
-    const fields = type === "sales" ? SALES_FIELDS : targetFields();
-    const mapping = guessMapping(headers, fields.map(f => f.key));
-    state.pendingMap = { type, file, headers, rows, fields, mapping };
+    const matrix = await readFileMatrix(file);
+    if (!matrix.length){ toast("That file looks empty"); return; }
+    const headerRowIndex = detectHeaderRow(matrix);
+    state.pendingMap = { type, file, matrix, headerRowIndex };
+    rebuildPendingHeaders();
     openMapModal();
   } catch (err){
     console.error(err);
@@ -460,35 +514,96 @@ async function handleFileForMapping(file, type){
   }
 }
 
+function rebuildPendingHeaders(){
+  const { matrix, headerRowIndex, type } = state.pendingMap;
+  const headers = extractHeaders(matrix, headerRowIndex);
+  const dataRows = extractDataRows(matrix, headerRowIndex);
+  const fields = type === "sales" ? SALES_FIELDS : TARGET_FIELDS;
+  const mapping = guessMapping(headers, fields.map(f => f.key));
+  state.pendingMap.headers = headers;
+  state.pendingMap.dataRows = dataRows;
+  state.pendingMap.fields = fields;
+  state.pendingMap.mapping = mapping;
+}
+
 function openMapModal(){
-  const { type, headers, rows, fields, mapping } = state.pendingMap;
+  const { type } = state.pendingMap;
   $("#mapModalTitle").textContent = type === "sales" ? "Match your sales columns" : "Match your target columns";
   $("#mapModalHint").textContent = type === "sales"
-    ? "Tell Ledger which column in your file is which. Date, salesperson and amount are required."
-    : `Tell Ledger which column holds each value. Salesperson, period and target are required. These will be saved as ${state.metric === "qty" ? "quantity (pcs)" : "sale value (\u20B9)"} targets — switch \u201CMeasure targets in\u201D at the top first if that's not right.`;
+    ? "Ledger guessed the header row and matched columns below — check them and adjust anything that's off. Date, salesperson and quantity are required."
+    : "Ledger guessed the header row and matched columns below — check them and adjust anything that's off. Salesperson, period and target quantity are required.";
+  renderHeaderRowSelect();
+  renderHeadersEditor();
+  renderFieldMapping();
+  renderMapPreview();
+  $("#mapModalBackdrop").classList.remove("hidden");
+}
 
+function renderHeaderRowSelect(){
+  const { matrix, headerRowIndex } = state.pendingMap;
+  const scanLimit = Math.min(15, matrix.length);
+  const sel = $("#headerRowSelect");
+  sel.innerHTML = "";
+  for (let i = 0; i < scanLimit; i++){
+    const opt = document.createElement("option");
+    opt.value = String(i);
+    opt.textContent = `Row ${i + 1}: ${rowPreviewLabel(matrix[i])}`;
+    if (i === headerRowIndex) opt.selected = true;
+    sel.appendChild(opt);
+  }
+}
+
+function renderHeadersEditor(){
+  const { headers } = state.pendingMap;
+  $("#headersEditor").innerHTML = headers.map(h => `
+    <div class="header-chip ${h.included ? "" : "is-excluded"}" data-index="${h.index}">
+      <input type="checkbox" class="header-include" data-index="${h.index}" ${h.included ? "checked" : ""} title="Include this column as an option below">
+      <input type="text" class="header-label" data-index="${h.index}" value="${escapeAttr(h.label)}">
+    </div>`).join("");
+
+  $$(".header-include").forEach(cb => cb.addEventListener("change", (e) => {
+    const idx = Number(e.target.dataset.index);
+    const h = state.pendingMap.headers.find(hh => hh.index === idx);
+    h.included = e.target.checked;
+    e.target.closest(".header-chip").classList.toggle("is-excluded", !h.included);
+    renderFieldMapping();
+    renderMapPreview();
+  }));
+  $$(".header-label").forEach(inp => inp.addEventListener("input", (e) => {
+    const idx = Number(e.target.dataset.index);
+    const h = state.pendingMap.headers.find(hh => hh.index === idx);
+    h.label = e.target.value.trim() || `Column ${idx + 1}`;
+    renderFieldMapping();
+    renderMapPreview();
+  }));
+}
+
+function renderFieldMapping(){
+  const { headers, fields, mapping } = state.pendingMap;
+  const included = headers.filter(h => h.included);
   $("#mapGrid").innerHTML = fields.map(f => `
     <div class="map-item">
       <label>${f.label}${f.required ? " *" : ""}</label>
       <select data-field="${f.key}">
         <option value="">${f.required ? "\u2014 choose a column \u2014" : "\u2014 none \u2014"}</option>
-        ${headers.map(h => `<option value="${escapeAttr(h)}" ${mapping[f.key] === h ? "selected" : ""}>${escapeHtml(h)}</option>`).join("")}
+        ${included.map(h => `<option value="${h.index}" ${String(mapping[f.key]) === String(h.index) ? "selected" : ""}>${escapeHtml(h.label)}</option>`).join("")}
       </select>
     </div>`).join("");
+}
 
-  const previewRows = rows.slice(0, 5);
-  $("#mapPreviewTable thead").innerHTML = `<tr>${headers.map(h => `<th>${escapeHtml(h)}</th>`).join("")}</tr>`;
-  $("#mapPreviewTable tbody").innerHTML = previewRows.map(r =>
-    `<tr>${headers.map(h => `<td>${escapeHtml(String(r[h] ?? ""))}</td>`).join("")}</tr>`
+function renderMapPreview(){
+  const { headers, dataRows, headerRowIndex } = state.pendingMap;
+  const rows = dataRows.slice(0, 5);
+  $("#mapPreviewTable thead").innerHTML = `<tr>${headers.map(h => `<th class="${h.included ? "" : "is-excluded"}">${escapeHtml(h.label)}</th>`).join("")}</tr>`;
+  $("#mapPreviewTable tbody").innerHTML = rows.map(r =>
+    `<tr>${headers.map(h => `<td class="${h.included ? "" : "is-excluded"}">${escapeHtml(String(r[h.index] ?? ""))}</td>`).join("")}</tr>`
   ).join("");
-  $("#mapRowCount").textContent = `${rows.length.toLocaleString("en-IN")} rows in file`;
-
-  $("#mapModalBackdrop").classList.remove("hidden");
+  $("#mapRowCount").textContent = `${dataRows.length.toLocaleString("en-IN")} data rows \u00B7 header on row ${headerRowIndex + 1}`;
 }
 
 function readMappingFromForm(){
   const mapping = {};
-  $$("#mapGrid select").forEach(sel => { mapping[sel.dataset.field] = sel.value; });
+  $$("#mapGrid select").forEach(sel => { mapping[sel.dataset.field] = sel.value === "" ? "" : Number(sel.value); });
   return mapping;
 }
 
@@ -496,6 +611,13 @@ function wireModals(){
   $("#mapModalClose").addEventListener("click", closeMapModal);
   $("#mapCancelBtn").addEventListener("click", closeMapModal);
   $("#mapConfirmBtn").addEventListener("click", confirmMapping);
+  $("#headerRowSelect").addEventListener("change", (e) => {
+    state.pendingMap.headerRowIndex = Number(e.target.value);
+    rebuildPendingHeaders();
+    renderHeadersEditor();
+    renderFieldMapping();
+    renderMapPreview();
+  });
 
   $("#drawerClose").addEventListener("click", () => $("#drawerBackdrop").classList.add("hidden"));
   $("#drawerBackdrop").addEventListener("click", (e) => { if (e.target.id === "drawerBackdrop") $("#drawerBackdrop").classList.add("hidden"); });
@@ -513,37 +635,44 @@ function closeMapModal(){
 }
 
 async function confirmMapping(){
-  const { type, file, rows, fields } = state.pendingMap;
+  const { type, file, dataRows, fields } = state.pendingMap;
   const mapping = readMappingFromForm();
-  const missing = fields.filter(f => f.required && !mapping[f.key]);
+  const missing = fields.filter(f => f.required && mapping[f.key] === "");
   if (missing.length){
     toast(`Please match: ${missing.map(f => f.label).join(", ")}`);
     return;
   }
 
-  if (type === "sales"){
-    const uploadId = await DB.addUpload({ file: file.name, rows: rows.length, uploadedAt: new Date().toISOString(), type: "sales" });
-    const { records, skipped } = buildSalesRecords(rows, mapping, uploadId);
-    if (!records.length){
-      toast("No valid rows found — check the column mapping");
-      await DB.deleteUpload(uploadId);
-      closeMapModal();
-      return;
+  try {
+    if (type === "sales"){
+      const uploadId = await DB.addUpload({ file: file.name, rows: dataRows.length, uploadedAt: new Date().toISOString(), type: "sales" });
+      const { records, skipped } = buildSalesRecords(dataRows, mapping, uploadId);
+      if (!records.length){
+        toast("No valid rows found — check the column mapping");
+        await DB.deleteUpload(uploadId);
+        closeMapModal();
+        return;
+      }
+      await DB.addSalesRecords(records);
+      state.sales = await DB.getAllSales();
+      state.uploads = await DB.getAllUploads();
+      toast(`Added ${records.length} sales records${skipped ? ` (${skipped} skipped)` : ""}`);
+    } else {
+      const { records, skipped } = buildTargetRecords(dataRows, mapping);
+      if (!records.length){
+        toast("No valid target rows found — check the column mapping");
+        closeMapModal();
+        return;
+      }
+      await DB.putTargets(records);
+      state.targets = await DB.getAllTargets();
+      toast(`Saved ${records.length} targets${skipped ? ` (${skipped} skipped)` : ""}`);
     }
-    await DB.addSalesRecords(records);
-    state.sales = await DB.getAllSales();
-    state.uploads = await DB.getAllUploads();
-    toast(`Added ${records.length} sales records${skipped ? ` (${skipped} skipped)` : ""}`);
-  } else {
-    const { records, skipped } = buildTargetRecords(rows, mapping, state.metric);
-    if (!records.length){
-      toast("No valid target rows found — check the column mapping");
-      closeMapModal();
-      return;
-    }
-    await DB.putTargets(records);
-    state.targets = await DB.getAllTargets();
-    toast(`Saved ${records.length} targets${skipped ? ` (${skipped} skipped)` : ""}`);
+  } catch (err){
+    console.error(err);
+    toast("Couldn't reach the backend — check the connection on the Data tab");
+    closeMapModal();
+    return;
   }
 
   closeMapModal();
@@ -559,16 +688,21 @@ async function confirmSuggestedTargets(){
     const store = tr.dataset.store, salesperson = tr.dataset.name;
     const val = Number(tr.querySelector(".suggest-input").value) || 0;
     if (val > 0){
-      rows.push({ key: `${store}|${salesperson}|${next}|${state.metric}`, store, salesperson, period: next, target: val, metric: state.metric });
+      rows.push({ key: `${store}|${salesperson}|${next}`, store, salesperson, period: next, target: val });
     }
   });
   if (!rows.length){ $("#suggestModalBackdrop").classList.add("hidden"); return; }
-  await DB.putTargets(rows);
-  state.targets = await DB.getAllTargets();
-  $("#suggestModalBackdrop").classList.add("hidden");
-  refreshFilters();
-  renderAll();
-  toast(`Saved ${rows.length} targets for ${formatPeriod(next)}`);
+  try {
+    await DB.putTargets(rows);
+    state.targets = await DB.getAllTargets();
+    $("#suggestModalBackdrop").classList.add("hidden");
+    refreshFilters();
+    renderAll();
+    toast(`Saved ${rows.length} targets for ${formatPeriod(next)}`);
+  } catch (err){
+    console.error(err);
+    toast("Couldn't save — check the connection on the Data tab");
+  }
 }
 
 /* ============ Data view ============ */
@@ -578,35 +712,46 @@ function renderDataView(){
     <tr>
       <td>${escapeHtml(u.file)}</td>
       <td>${u.rows}</td>
-      <td>${new Date(u.uploadedAt).toLocaleString("en-IN")}</td>
+      <td>${u.uploadedAt ? new Date(u.uploadedAt).toLocaleString("en-IN") : "\u2014"}</td>
       <td>${u.type}</td>
       <td><button class="btn btn-ghost btn-small" data-id="${u.id}">Remove</button></td>
     </tr>`).join("");
 
   $$("#uploadsTable button[data-id]").forEach(btn => {
     btn.addEventListener("click", async () => {
-      const id = Number(btn.dataset.id);
-      await DB.deleteSalesByUpload(id);
-      await DB.deleteUpload(id);
-      state.sales = await DB.getAllSales();
-      state.uploads = await DB.getAllUploads();
-      refreshFilters();
-      renderAll();
-      renderDataView();
-      toast("Upload removed");
+      const id = btn.dataset.id;
+      try {
+        await DB.deleteSalesByUpload(id);
+        await DB.deleteUpload(id);
+        state.sales = await DB.getAllSales();
+        state.uploads = await DB.getAllUploads();
+        refreshFilters();
+        renderAll();
+        renderDataView();
+        toast("Upload removed");
+      } catch (err){
+        console.error(err);
+        toast("Couldn't remove — check the connection on the Data tab");
+      }
     });
   });
 }
 
 function wireDataView(){
   $("#clearAllBtn").addEventListener("click", async () => {
-    if (!confirm("This clears all sales records, targets and uploads stored in this browser. Continue?")) return;
-    await DB.clearAll();
-    state.sales = []; state.targets = []; state.uploads = [];
-    refreshFilters();
-    renderAll();
-    renderDataView();
-    toast("All data cleared");
+    if (!isConfigured()){ toast("Connect your Google Sheet first"); return; }
+    if (!confirm("This clears all sales records, targets and uploads in your connected Google Sheet. Continue?")) return;
+    try {
+      await DB.clearAll();
+      state.sales = []; state.targets = []; state.uploads = [];
+      refreshFilters();
+      renderAll();
+      renderDataView();
+      toast("All data cleared");
+    } catch (err){
+      console.error(err);
+      toast("Couldn't clear — check the connection on the Data tab");
+    }
   });
 }
 
@@ -631,10 +776,10 @@ function downloadBlob(text, filename){
 function exportData(){
   if (!state.sales.length && !state.targets.length){ toast("Nothing to export yet"); return; }
   if (state.sales.length){
-    downloadBlob(toCSV(state.sales, ["date", "period", "store", "salesperson", "amount", "qty", "bill"]), "sales_export.csv");
+    downloadBlob(toCSV(state.sales, ["date", "period", "store", "salesperson", "qty", "bill"]), "sales_export.csv");
   }
   if (state.targets.length){
-    downloadBlob(toCSV(state.targets, ["store", "salesperson", "period", "target", "metric"]), "targets_export.csv");
+    downloadBlob(toCSV(state.targets, ["store", "salesperson", "period", "target"]), "targets_export.csv");
   }
   toast("Export started");
 }

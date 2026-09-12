@@ -54,13 +54,6 @@
           <span>Period</span>
           <select id="filterPeriod"><option value="__all__">All periods</option></select>
         </label>
-        <label class="field">
-          <span>Measure targets in</span>
-          <select id="filterMetric">
-            <option value="amount">Sale value (&#8377;)</option>
-            <option value="qty">Quantity (pcs)</option>
-          </select>
-        </label>
       </div>
       <div class="topbar-actions">
         <button class="btn btn-ghost" id="exportBtn">Export data</button>
@@ -74,8 +67,8 @@
       <section class="view is-active" data-view="dashboard">
 
         <div class="empty-state" id="dashboardEmpty">
-          <h2>No sales data yet</h2>
-          <p>Upload an Excel or CSV export from your ERP to see achievement against target, store-wise performance, and who needs support to hit the next target.</p>
+          <h2 id="dashboardEmptyTitle">No sales data yet</h2>
+          <p id="dashboardEmptyText">Upload an Excel or CSV export from your ERP to see achievement against target, store-wise performance, and who needs support to hit the next target.</p>
           <button class="btn btn-primary" id="emptyUploadBtn">Upload your first file</button>
         </div>
 
@@ -96,15 +89,15 @@
               <div class="hero-ring-meta">
                 <div class="hero-figure">
                   <span class="hero-figure-label">Achieved</span>
-                  <span class="hero-figure-val" id="heroAchieved">&#8377;0</span>
+                  <span class="hero-figure-val" id="heroAchieved">0</span>
                 </div>
                 <div class="hero-figure">
                   <span class="hero-figure-label">Target</span>
-                  <span class="hero-figure-val" id="heroTarget">&#8377;0</span>
+                  <span class="hero-figure-val" id="heroTarget">0</span>
                 </div>
                 <div class="hero-figure">
                   <span class="hero-figure-label">Gap</span>
-                  <span class="hero-figure-val" id="heroGap">&#8377;0</span>
+                  <span class="hero-figure-val" id="heroGap">0</span>
                 </div>
               </div>
             </div>
@@ -190,7 +183,7 @@
               <th data-sort="target">Target</th>
               <th data-sort="achv">Achv. %</th>
               <th data-sort="bills">Bills</th>
-              <th data-sort="abv">Avg. bill</th>
+              <th data-sort="abv">Avg/bill</th>
             </tr>
           </thead>
           <tbody></tbody>
@@ -242,8 +235,24 @@
 
         <div class="panel">
           <div class="panel-head">
+            <h3>Connect your Google Sheet</h3>
+            <span class="panel-sub" id="connectionStatus">Not connected</span>
+          </div>
+          <p class="modal-hint">
+            Paste the Web App URL from your deployed Apps Script backend (see README &rarr; Backend setup).
+            Once connected, data lives in that Google Sheet &mdash; open this site from any browser or device
+            and it looks the same, because nothing is stored locally.
+          </p>
+          <div class="connection-row">
+            <input type="text" id="apiUrlInput" placeholder="https://script.google.com/macros/s/&hellip;/exec">
+            <button class="btn btn-primary" id="apiUrlSaveBtn">Save &amp; connect</button>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
             <h3>Upload sales export</h3>
-            <span class="panel-sub">CSV or Excel from your ERP &mdash; you'll map columns next</span>
+            <span class="panel-sub">CSV or Excel from your ERP &mdash; heading row can start anywhere in the file, you'll confirm it next</span>
           </div>
           <div class="dropzone" id="dropzone">
             <p><strong>Drop a file here</strong> or click to browse</p>
@@ -255,7 +264,7 @@
         <div class="panel">
           <div class="panel-head">
             <h3>Upload history</h3>
-            <span class="panel-sub">Batches stored in this browser</span>
+            <span class="panel-sub">Batches recorded in your Google Sheet</span>
           </div>
           <table class="ledger" id="uploadsTable">
             <thead><tr><th>File</th><th>Rows</th><th>Uploaded</th><th>Type</th><th></th></tr></thead>
@@ -267,9 +276,9 @@
         <div class="panel danger-panel">
           <div class="panel-head">
             <h3>Reset</h3>
-            <span class="panel-sub">Clears everything stored in this browser</span>
+            <span class="panel-sub">Clears every sheet in your connected Google Sheet</span>
           </div>
-          <button class="btn btn-danger" id="clearAllBtn">Clear all stored data</button>
+          <button class="btn btn-danger" id="clearAllBtn">Clear all data</button>
         </div>
       </section>
 
@@ -286,7 +295,24 @@
     </div>
     <div class="modal-body">
       <p class="modal-hint" id="mapModalHint">Tell Ledger which column in your file is which. This only takes a moment, and it remembers nothing you don't confirm.</p>
-      <div class="map-grid" id="mapGrid"></div>
+
+      <div class="map-section">
+        <label class="map-section-label">Header row</label>
+        <select id="headerRowSelect"></select>
+        <p class="map-section-hint">Ledger guesses this automatically &mdash; change it if your file has title rows or blank rows above the actual headings.</p>
+      </div>
+
+      <div class="map-section">
+        <label class="map-section-label">Detected headings</label>
+        <p class="map-section-hint">Untick a column to hide it below, or rename one that came through blank.</p>
+        <div class="headers-editor" id="headersEditor"></div>
+      </div>
+
+      <div class="map-section">
+        <label class="map-section-label">Match to fields</label>
+        <div class="map-grid" id="mapGrid"></div>
+      </div>
+
       <div class="map-preview">
         <h4>Preview</h4>
         <div class="table-scroll">

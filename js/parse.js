@@ -1,16 +1,13 @@
-// Reads a File (csv/xlsx/xls) into { headers: [...], rows: [ {header: value, ...} ] }
-export function readFile(file){
+// Reads a File (csv/xlsx/xls) into a raw matrix: array of arrays of cell
+// values, exactly as they appear in the file — no header assumption yet.
+export function readFileMatrix(file){
   const ext = file.name.split(".").pop().toLowerCase();
   if (ext === "csv"){
     return new Promise((resolve, reject) => {
       window.Papa.parse(file, {
-        header: true,
-        skipEmptyLines: true,
-        dynamicTyping: false,
-        complete: (res) => {
-          const headers = res.meta.fields || [];
-          resolve({ headers, rows: res.data });
-        },
+        header: false,
+        skipEmptyLines: "greedy",
+        complete: (res) => resolve(res.data),
         error: reject
       });
     });
@@ -20,34 +17,83 @@ export function readFile(file){
     const wb = window.XLSX.read(buf, { type: "array", cellDates: true });
     const sheetName = wb.SheetNames[0];
     const sheet = wb.Sheets[sheetName];
-    const rows = window.XLSX.utils.sheet_to_json(sheet, { defval: "", raw: false });
-    const headers = rows.length ? Object.keys(rows[0]) : [];
-    return { headers, rows };
+    return window.XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "", raw: false, blankrows: false });
   });
 }
 
-// Try to guess which source header matches a target field, by loose name matching
+const HEADER_KEYWORDS = [
+  "date", "store", "branch", "outlet", "location", "shop",
+  "salesperson", "sales person", "staff", "employee", "sold by", "executive", "name",
+  "qty", "quantity", "units", "pieces", "pcs",
+  "bill", "invoice", "receipt", "period", "month", "target"
+];
+
+// Scans the first `maxScan` rows and guesses which one is the header row —
+// the row with the most non-empty, non-numeric, header-keyword-like cells.
+export function detectHeaderRow(matrix, maxScan = 15){
+  let best = 0, bestScore = -Infinity;
+  const scanLimit = Math.min(maxScan, matrix.length);
+  for (let i = 0; i < scanLimit; i++){
+    const row = matrix[i] || [];
+    let nonEmpty = 0, numeric = 0, keywordHits = 0;
+    for (const cell of row){
+      const s = String(cell ?? "").trim();
+      if (!s) continue;
+      nonEmpty++;
+      if (/^-?\d+(\.\d+)?$/.test(s)) numeric++;
+      const low = s.toLowerCase();
+      if (HEADER_KEYWORDS.some(k => low.includes(k))) keywordHits++;
+    }
+    if (nonEmpty < 2) continue; // skip blank / near-blank rows (titles, gaps)
+    const score = nonEmpty - numeric * 1.5 + keywordHits * 3;
+    if (score > bestScore){ bestScore = score; best = i; }
+  }
+  return best;
+}
+
+// headers: [{ index, label, included }] — editable by the user before confirming
+export function extractHeaders(matrix, headerRowIndex){
+  const headerRow = matrix[headerRowIndex] || [];
+  const nextRows = matrix.slice(headerRowIndex + 1, headerRowIndex + 6);
+  const width = Math.max(headerRow.length, ...nextRows.map(r => r.length), 1);
+  const headers = [];
+  for (let i = 0; i < width; i++){
+    const raw = String(headerRow[i] ?? "").trim();
+    headers.push({ index: i, label: raw || `Column ${i + 1}`, included: true });
+  }
+  return headers;
+}
+
+export function extractDataRows(matrix, headerRowIndex){
+  return matrix.slice(headerRowIndex + 1).filter(row => row.some(c => String(c ?? "").trim() !== ""));
+}
+
+// Row label for the "which row is the header?" picker in the mapping modal
+export function rowPreviewLabel(row){
+  const cells = (row || []).map(c => String(c ?? "").trim()).filter(Boolean).slice(0, 5);
+  return cells.length ? cells.join(" \u00B7 ") : "(blank row)";
+}
+
 const GUESS_MAP = {
   date: ["date", "bill date", "sale date", "txn date", "invoice date"],
   store: ["store", "branch", "outlet", "location", "shop"],
   salesperson: ["salesperson", "sales person", "staff", "employee", "sold by", "executive", "sales executive", "name"],
-  amount: ["amount", "sale amount", "net amount", "total", "sales value", "bill amount", "value"],
   qty: ["qty", "quantity", "units", "pieces", "pcs"],
   bill: ["bill no", "bill number", "invoice no", "invoice", "bill", "receipt no"],
-  target: ["target", "sales target", "monthly target"],
+  target: ["target", "sales target", "monthly target", "qty target"],
   period: ["period", "month", "target month"]
 };
 
+// Guess field -> column index from (editable) header labels
 export function guessMapping(headers, fields){
   const mapping = {};
   for (const field of fields){
     const candidates = GUESS_MAP[field] || [field];
     let found = "";
     for (const h of headers){
-      const hLower = h.toLowerCase().trim();
-      if (candidates.some(c => hLower === c || hLower.includes(c))){
-        found = h; break;
-      }
+      if (!h.included) continue;
+      const low = h.label.toLowerCase().trim();
+      if (candidates.some(c => low === c || low.includes(c))){ found = h.index; break; }
     }
     mapping[field] = found;
   }
@@ -57,13 +103,11 @@ export function guessMapping(headers, fields){
 function parseDateValue(v){
   if (v instanceof Date && !isNaN(v)) return v;
   if (typeof v === "number"){
-    // excel serial date
     const d = window.XLSX ? window.XLSX.SSF.parse_date_code(v) : null;
     if (d) return new Date(Date.UTC(d.y, d.m - 1, d.d));
   }
   if (typeof v === "string"){
     const s = v.trim();
-    // try dd-mm-yyyy or dd/mm/yyyy first (common in Indian exports)
     let m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
     if (m){
       let [, d, mo, y] = m;
@@ -90,52 +134,52 @@ function cleanNumber(v){
   return isNaN(n) ? 0 : n;
 }
 
-// Normalize raw rows into sales records using confirmed mapping
-export function buildSalesRecords(rows, mapping, uploadId){
+// mapping values are column indices (numbers) or "" when unmapped
+function cell(row, idx){
+  return idx === "" || idx === undefined ? "" : row[idx];
+}
+
+// Normalize raw data rows into sales records. Quantity is the tracked
+// figure — no price/amount involved.
+export function buildSalesRecords(dataRows, mapping, uploadId){
   const out = [];
   let skipped = 0;
-  for (const row of rows){
-    const rawDate = mapping.date ? row[mapping.date] : "";
-    const dateObj = parseDateValue(rawDate);
-    const store = mapping.store ? String(row[mapping.store] || "").trim() : "Main";
-    const salesperson = mapping.salesperson ? String(row[mapping.salesperson] || "").trim() : "";
-    const amount = mapping.amount ? cleanNumber(row[mapping.amount]) : 0;
-    if (!dateObj || !salesperson || !amount){ skipped++; continue; }
+  for (const row of dataRows){
+    const dateObj = parseDateValue(cell(row, mapping.date));
+    const store = String(cell(row, mapping.store) || "").trim();
+    const salesperson = String(cell(row, mapping.salesperson) || "").trim();
+    const qty = cleanNumber(cell(row, mapping.qty));
+    if (!dateObj || !salesperson || !qty){ skipped++; continue; }
     out.push({
       uploadId,
       date: dateObj.toISOString().slice(0, 10),
       period: toPeriod(dateObj),
       store: store || "Main",
       salesperson,
-      amount,
-      qty: mapping.qty ? cleanNumber(row[mapping.qty]) : 0,
-      bill: mapping.bill ? String(row[mapping.bill] || "") : ""
+      qty,
+      bill: String(cell(row, mapping.bill) || "")
     });
   }
   return { records: out, skipped };
 }
 
-// Normalize raw rows into target records using confirmed mapping.
-// metric: "amount" (₹ sales value) or "qty" (units) — which basis this batch of targets is set on.
-export function buildTargetRecords(rows, mapping, metric = "amount"){
+export function buildTargetRecords(dataRows, mapping){
   const out = [];
   let skipped = 0;
-  for (const row of rows){
-    const store = mapping.store ? String(row[mapping.store] || "").trim() : "Main";
-    const salesperson = mapping.salesperson ? String(row[mapping.salesperson] || "").trim() : "";
-    const target = mapping.target ? cleanNumber(row[mapping.target]) : 0;
-    let period = mapping.period ? String(row[mapping.period] || "").trim() : "";
-    // normalize period to YYYY-MM if it looks like a date
+  for (const row of dataRows){
+    const store = String(cell(row, mapping.store) || "").trim();
+    const salesperson = String(cell(row, mapping.salesperson) || "").trim();
+    const target = cleanNumber(cell(row, mapping.target));
+    let period = String(cell(row, mapping.period) || "").trim();
     const asDate = parseDateValue(period);
     if (asDate) period = toPeriod(asDate);
     if (!salesperson || !target || !period){ skipped++; continue; }
     out.push({
-      key: `${store}|${salesperson}|${period}|${metric}`,
+      key: `${store || "Main"}|${salesperson}|${period}`,
       store: store || "Main",
       salesperson,
       period,
-      target,
-      metric
+      target
     });
   }
   return { records: out, skipped };

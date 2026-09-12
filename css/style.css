@@ -275,6 +275,36 @@ button{ font-family: inherit; }
 }
 .toast.is-shown{ opacity:1; transform: translateX(-50%) translateY(0); }
 
+/* ============ Connection panel ============ */
+.connection-row{ display:flex; gap:10px; margin-top:10px; }
+.connection-row input{
+  flex:1; padding: 9px 12px; border:1px solid var(--line); border-radius: var(--radius-sm);
+  font-size: 13.5px; font-family: monospace;
+}
+
+/* ============ Map modal sections ============ */
+.map-section{ margin-bottom: 18px; }
+.map-section-label{ display:block; font-size:12px; font-weight:600; color: var(--ink-soft); margin-bottom:6px; text-transform:uppercase; letter-spacing:.03em; }
+.map-section-hint{ font-size:12px; color: var(--ink-soft); margin: 4px 0 0; }
+#headerRowSelect{
+  width:100%; padding: 8px 10px; border:1px solid var(--line); border-radius: var(--radius-sm);
+  font-size: 13px; background: var(--surface);
+}
+.headers-editor{ display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; }
+.header-chip{
+  display:flex; align-items:center; gap:6px;
+  border:1px solid var(--line); border-radius: 100px;
+  padding: 4px 10px 4px 8px; background: var(--surface);
+}
+.header-chip.is-excluded{ opacity:.45; background: var(--paper); }
+.header-chip input[type="checkbox"]{ margin:0; }
+.header-chip input.header-label{
+  border:none; background:transparent; font-size:12.5px; width: 110px;
+  padding: 2px 0; color: var(--ink);
+}
+.header-chip input.header-label:focus{ outline: 1px solid var(--marigold); border-radius:3px; }
+th.is-excluded, td.is-excluded{ opacity: .4; text-decoration: line-through; }
+
 /* ============ Responsive ============ */
 @media (max-width: 900px){
   .rail{ display:none; }
