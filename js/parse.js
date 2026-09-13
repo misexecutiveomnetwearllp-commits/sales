@@ -21,6 +21,39 @@ export function readFileMatrix(file){
   });
 }
 
+// Converts a File to a base64 string, for handing off to the backend to
+// store as-is (chunked to avoid call-stack limits on large files).
+export function fileToBase64(file){
+  return file.arrayBuffer().then(buf => {
+    const bytes = new Uint8Array(buf);
+    const chunkSize = 0x8000;
+    let binary = "";
+    for (let i = 0; i < bytes.length; i += chunkSize){
+      binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize));
+    }
+    return btoa(binary);
+  });
+}
+
+// Rebuilds a raw matrix from a base64 string + filename — used when
+// re-loading a previously uploaded file from the backend, without the
+// user needing to pick the file from disk again.
+export function matrixFromBase64(base64, filename){
+  const ext = (filename || "").split(".").pop().toLowerCase();
+  if (ext === "csv"){
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    const text = new TextDecoder("utf-8").decode(bytes);
+    const result = window.Papa.parse(text, { header: false, skipEmptyLines: "greedy" });
+    return result.data;
+  }
+  const wb = window.XLSX.read(base64, { type: "base64", cellDates: true });
+  const sheetName = wb.SheetNames[0];
+  const sheet = wb.Sheets[sheetName];
+  return window.XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "", raw: false, blankrows: false });
+}
+
 const HEADER_KEYWORDS = [
   "date", "store", "branch", "outlet", "location", "shop",
   "salesperson", "sales person", "staff", "employee", "sold by", "executive", "name",

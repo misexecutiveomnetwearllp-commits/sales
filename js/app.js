@@ -1,6 +1,6 @@
 import { DB, setApiUrl, getApiUrl, isConfigured } from "./api.js";
 import {
-  readFileMatrix, detectHeaderRow, extractHeaders, extractDataRows, rowPreviewLabel,
+  readFileMatrix, fileToBase64, matrixFromBase64, detectHeaderRow, extractHeaders, extractDataRows, rowPreviewLabel,
   guessMapping, buildSalesRecords, buildTargetRecords
 } from "./parse.js";
 import {
@@ -13,7 +13,7 @@ import { renderTrendChart } from "./charts.js";
 const state = {
   sales: [],
   targets: [],
-  uploads: [],
+  files: [],
   store: "__all__",
   period: "__all__",
   growthRate: 10,
@@ -56,11 +56,12 @@ async function loadData(){
     return;
   }
   try {
-    state.sales = await DB.getAllSales();
-    state.targets = await DB.getAllTargets();
-    state.uploads = await DB.getAllUploads();
-    state.growthRate = Number(await DB.getMeta("growthRate", 10)) || 10;
+    const c = await DB.refresh();
+    state.files = c.files;
+    state.targets = c.targets;
+    state.growthRate = Number(c.meta.growthRate || 10) || 10;
     $("#growthRate").value = state.growthRate;
+    await reloadSalesFromFiles();
   } catch (err){
     console.error(err);
     toast("Couldn't reach the backend: " + (err.message || err) + " — check the Data tab");
@@ -68,6 +69,31 @@ async function loadData(){
   refreshFilters();
   renderAll();
   renderDataView();
+}
+
+// Re-downloads every stored sales file and re-parses it client-side using
+// the mapping saved at upload time — this is how "the same data everywhere"
+// works without writing rows into the Sheet.
+async function reloadSalesFromFiles(){
+  const salesFiles = state.files.filter(f => f.type === "sales");
+  const allRecords = [];
+  for (const f of salesFiles){
+    if (!f.mapping || f.headerRowIndex === null){
+      console.warn("Skipping file with no saved mapping:", f.name);
+      continue;
+    }
+    try {
+      const content = await DB.getFileContent(f.id);
+      const matrix = matrixFromBase64(content.base64, content.name || f.name);
+      const dataRows = extractDataRows(matrix, f.headerRowIndex);
+      const { records } = buildSalesRecords(dataRows, f.mapping, f.id);
+      allRecords.push(...records);
+    } catch (err){
+      console.error("Failed to load file", f.name, err);
+      toast(`Couldn't load ${f.name}: ` + (err.message || err));
+    }
+  }
+  state.sales = allRecords;
 }
 
 /* ============ Connection (Apps Script URL) ============ */
@@ -681,17 +707,22 @@ async function confirmMapping(){
 
   try {
     if (type === "sales"){
-      const uploadId = await DB.addUpload({ file: file.name, rows: dataRows.length, uploadedAt: new Date().toISOString(), type: "sales" });
-      const { records, skipped } = buildSalesRecords(dataRows, mapping, uploadId);
-      if (!records.length){
+      const { headerRowIndex } = state.pendingMap;
+      const dryRun = buildSalesRecords(dataRows, mapping, "pending");
+      if (!dryRun.records.length){
         toast("No valid rows found — check the column mapping");
-        await DB.deleteUpload(uploadId);
         closeMapModal();
         return;
       }
-      await DB.addSalesRecords(records);
-      state.sales = await DB.getAllSales();
-      state.uploads = await DB.getAllUploads();
+      const base64 = await fileToBase64(file);
+      const fileId = await DB.uploadFile({
+        name: file.name, base64, mimeType: file.type || "",
+        type: "sales", headerRowIndex, mapping, rows: dryRun.records.length,
+        uploadedAt: new Date().toISOString()
+      });
+      const { records, skipped } = buildSalesRecords(dataRows, mapping, fileId);
+      state.sales = [...state.sales, ...records];
+      state.files = await DB.getFiles();
       toast(`Added ${records.length} sales records${skipped ? ` (${skipped} skipped)` : ""}`);
     } else {
       const { records, skipped } = buildTargetRecords(dataRows, mapping);
@@ -743,28 +774,27 @@ async function confirmSuggestedTargets(){
 
 /* ============ Data view ============ */
 function renderDataView(){
-  $("#uploadsEmpty").classList.toggle("hidden", state.uploads.length > 0);
-  $("#uploadsTable tbody").innerHTML = state.uploads.slice().reverse().map(u => `
+  $("#uploadsEmpty").classList.toggle("hidden", state.files.length > 0);
+  $("#uploadsTable tbody").innerHTML = state.files.slice().reverse().map(f => `
     <tr>
-      <td>${escapeHtml(u.file)}</td>
-      <td>${u.rows}</td>
-      <td>${u.uploadedAt ? new Date(u.uploadedAt).toLocaleString("en-IN") : "\u2014"}</td>
-      <td>${u.type}</td>
-      <td><button class="btn btn-ghost btn-small" data-id="${u.id}">Remove</button></td>
+      <td>${escapeHtml(f.name)}</td>
+      <td>${f.rows}</td>
+      <td>${f.uploadedAt ? new Date(f.uploadedAt).toLocaleString("en-IN") : "\u2014"}</td>
+      <td>${f.type}</td>
+      <td><button class="btn btn-ghost btn-small" data-id="${escapeAttr(f.id)}">Remove</button></td>
     </tr>`).join("");
 
   $$("#uploadsTable button[data-id]").forEach(btn => {
     btn.addEventListener("click", async () => {
       const id = btn.dataset.id;
       try {
-        await DB.deleteSalesByUpload(id);
-        await DB.deleteUpload(id);
-        state.sales = await DB.getAllSales();
-        state.uploads = await DB.getAllUploads();
+        await DB.deleteFile(id);
+        state.files = state.files.filter(f => f.id !== id);
+        state.sales = state.sales.filter(r => r.uploadId !== id);
         refreshFilters();
         renderAll();
         renderDataView();
-        toast("Upload removed");
+        toast("File removed");
       } catch (err){
         console.error(err);
         toast("Couldn't remove: " + (err.message || err));
@@ -776,10 +806,10 @@ function renderDataView(){
 function wireDataView(){
   $("#clearAllBtn").addEventListener("click", async () => {
     if (!isConfigured()){ toast("Connect your Google Sheet first"); return; }
-    if (!confirm("This clears all sales records, targets and uploads in your connected Google Sheet. Continue?")) return;
+    if (!confirm("This removes every uploaded file, all targets, and settings from your connected Google Sheet and Drive folder. Continue?")) return;
     try {
       await DB.clearAll();
-      state.sales = []; state.targets = []; state.uploads = [];
+      state.sales = []; state.targets = []; state.files = [];
       refreshFilters();
       renderAll();
       renderDataView();

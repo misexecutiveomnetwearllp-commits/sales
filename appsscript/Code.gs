@@ -1,8 +1,15 @@
 /**
  * Ledger — Sales Performance backend.
  * Deploy as a Web App (Execute as: Me, Who has access: Anyone).
- * Backed by a Google Sheet with tabs: Sales, Targets, Uploads, Meta
- * (created automatically on first use — nothing to set up by hand).
+ *
+ * Sales data is NOT written row-by-row into the Sheet. Each uploaded file
+ * is stored as-is in a Drive folder, along with the column mapping you
+ * confirmed on upload; the site re-downloads and re-parses that file in
+ * the browser every time it loads, so opening it from any browser/device
+ * shows the same data until you remove the file.
+ *
+ * Targets (typed in or imported on the Targets tab) ARE stored as rows,
+ * since they're edited cell-by-cell in the app.
  *
  * IMPORTANT: paste your Google Sheet's ID below before deploying.
  * Find it in the Sheet's URL: docs.google.com/spreadsheets/d/<THIS PART>/edit
@@ -11,9 +18,8 @@
 const SPREADSHEET_ID = "PASTE_YOUR_SPREADSHEET_ID_HERE";
 
 const SHEETS = {
-  sales: { name: "Sales", headers: ["id", "uploadId", "date", "period", "store", "salesperson", "qty", "bill"] },
+  files: { name: "Files", headers: ["id", "name", "driveFileId", "uploadedAt", "type", "headerRowIndex", "mapping", "rows"] },
   targets: { name: "Targets", headers: ["key", "store", "salesperson", "period", "target"] },
-  uploads: { name: "Uploads", headers: ["id", "file", "rows", "uploadedAt", "type"] },
   meta: { name: "Meta", headers: ["key", "value"] }
 };
 
@@ -34,6 +40,17 @@ function getSheet_(kind){
     sheet.setFrozenRows(1);
   }
   return sheet;
+}
+
+function getFilesFolder_(){
+  const props = PropertiesService.getScriptProperties();
+  const folderId = props.getProperty("filesFolderId");
+  if (folderId){
+    try { return DriveApp.getFolderById(folderId); } catch (e){ /* recreate below */ }
+  }
+  const folder = DriveApp.createFolder("Ledger Sales Performance Files");
+  props.setProperty("filesFolderId", folder.getId());
+  return folder;
 }
 
 function sheetToObjects_(sheet){
@@ -70,11 +87,12 @@ function doGet(e){
       const meta = {};
       metaRows.forEach(r => { meta[r.key] = r.value; });
       result = {
-        sales: sheetToObjects_(getSheet_("sales")),
+        files: sheetToObjects_(getSheet_("files")),
         targets: sheetToObjects_(getSheet_("targets")),
-        uploads: sheetToObjects_(getSheet_("uploads")),
         meta
       };
+    } else if (action === "getFileContent"){
+      result = getFileContent_(e.parameter.id);
     } else {
       result = { error: "Unknown action: " + action };
     }
@@ -96,15 +114,12 @@ function doPost(e){
   let result;
   try {
     switch (action){
-      case "addSales": result = addSales_(payload); break;
-      case "deleteSalesByUpload": result = deleteSalesByUpload_(payload); break;
-      case "clearSales": result = clearSheet_("sales"); break;
+      case "uploadFile": result = uploadFile_(payload); break;
+      case "deleteFile": result = deleteFile_(payload); break;
+      case "clearFiles": result = clearFiles_(); break;
       case "putTargets": result = putTargets_(payload); break;
       case "deleteTarget": result = deleteTarget_(payload); break;
       case "clearTargets": result = clearSheet_("targets"); break;
-      case "addUpload": result = addUpload_(payload); break;
-      case "deleteUpload": result = deleteUpload_(payload); break;
-      case "clearUploads": result = clearSheet_("uploads"); break;
       case "setMeta": result = setMeta_(payload); break;
       case "clearAll": result = clearAll_(); break;
       default: result = { error: "Unknown action: " + action };
@@ -119,31 +134,59 @@ function jsonOut_(obj){
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
 }
 
-/* ============ Sales ============ */
+/* ============ Files (Drive-backed) ============ */
 
-function addSales_(payload){
-  const records = payload.records || [];
-  if (!records.length) return { count: 0 };
-  const sheet = getSheet_("sales");
-  const rows = records.map(r => [
-    Utilities.getUuid(), r.uploadId || "", r.date || "", r.period || "",
-    r.store || "", r.salesperson || "", r.qty || 0, r.bill || ""
+function uploadFile_(payload){
+  const folder = getFilesFolder_();
+  const bytes = Utilities.base64Decode(payload.base64);
+  const blob = Utilities.newBlob(bytes, payload.mimeType || "application/octet-stream", payload.name || "upload");
+  const driveFile = folder.createFile(blob);
+  const id = Utilities.getUuid();
+  const sheet = getSheet_("files");
+  sheet.appendRow([
+    id,
+    payload.name || "",
+    driveFile.getId(),
+    payload.uploadedAt || new Date().toISOString(),
+    payload.type || "sales",
+    (payload.headerRowIndex === undefined || payload.headerRowIndex === null) ? "" : payload.headerRowIndex,
+    payload.mapping ? JSON.stringify(payload.mapping) : "",
+    payload.rows || 0
   ]);
-  sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows);
-  return { count: rows.length };
+  return { id };
 }
 
-function deleteSalesByUpload_(payload){
-  const uploadId = payload.uploadId;
-  const sheet = getSheet_("sales");
+function getFileContent_(id){
+  const sheet = getSheet_("files");
+  const rowIdx = findRowIndexByValue_(sheet, 0, id);
+  if (rowIdx < 0) return { error: "File not found" };
   const values = sheet.getDataRange().getValues();
-  const keepRows = [values[0]];
-  for (let i = 1; i < values.length; i++){
-    if (String(values[i][1]) !== String(uploadId)) keepRows.push(values[i]);
+  const row = values[rowIdx - 1];
+  const driveFileId = row[2];
+  const file = DriveApp.getFileById(driveFileId);
+  const bytes = file.getBlob().getBytes();
+  return { name: row[1], base64: Utilities.base64Encode(bytes) };
+}
+
+function deleteFile_(payload){
+  const sheet = getSheet_("files");
+  const rowIdx = findRowIndexByValue_(sheet, 0, payload.id);
+  if (rowIdx > 0){
+    const values = sheet.getDataRange().getValues();
+    const driveFileId = values[rowIdx - 1][2];
+    try { DriveApp.getFileById(driveFileId).setTrashed(true); } catch (e){ /* already gone */ }
+    sheet.deleteRow(rowIdx);
   }
-  sheet.clearContents();
-  sheet.getRange(1, 1, keepRows.length, keepRows[0].length).setValues(keepRows);
   return { ok: true };
+}
+
+function clearFiles_(){
+  const sheet = getSheet_("files");
+  const values = sheet.getDataRange().getValues();
+  for (let i = 1; i < values.length; i++){
+    try { DriveApp.getFileById(values[i][2]).setTrashed(true); } catch (e){ /* already gone */ }
+  }
+  return clearSheet_("files");
 }
 
 /* ============ Targets (upsert by key) ============ */
@@ -176,22 +219,6 @@ function deleteTarget_(payload){
   return { ok: true };
 }
 
-/* ============ Uploads ============ */
-
-function addUpload_(payload){
-  const sheet = getSheet_("uploads");
-  const id = Utilities.getUuid();
-  sheet.appendRow([id, payload.file || "", payload.rows || 0, payload.uploadedAt || new Date().toISOString(), payload.type || "sales"]);
-  return { id };
-}
-
-function deleteUpload_(payload){
-  const sheet = getSheet_("uploads");
-  const rowIdx = findRowIndexByValue_(sheet, 0, payload.id);
-  if (rowIdx > 0) sheet.deleteRow(rowIdx);
-  return { ok: true };
-}
-
 /* ============ Meta ============ */
 
 function setMeta_(payload){
@@ -217,9 +244,8 @@ function clearSheet_(kind){
 }
 
 function clearAll_(){
-  clearSheet_("sales");
+  clearFiles_();
   clearSheet_("targets");
-  clearSheet_("uploads");
   clearSheet_("meta");
   return { ok: true };
 }

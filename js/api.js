@@ -1,6 +1,6 @@
 import { APPS_SCRIPT_URL } from "./config.js";
 
-let cache = null; // { sales, targets, uploads, meta }
+let cache = null; // { files, targets, meta }
 let urlOverride = null;
 
 function apiUrl(){
@@ -20,6 +20,23 @@ export function isConfigured(){
   return !!apiUrl();
 }
 
+function normalizeFileRow(f){
+  let mapping = null;
+  try { mapping = f.mapping ? JSON.parse(f.mapping) : null; } catch (e){ mapping = null; }
+  return {
+    id: f.id,
+    name: f.name,
+    uploadedAt: f.uploadedAt,
+    type: f.type,
+    headerRowIndex: (f.headerRowIndex === "" || f.headerRowIndex === null || f.headerRowIndex === undefined) ? null : Number(f.headerRowIndex),
+    mapping,
+    rows: Number(f.rows) || 0
+  };
+}
+function normalizeTargetRow(r){
+  return { key: r.key, store: r.store, salesperson: r.salesperson, period: r.period, target: Number(r.target) || 0 };
+}
+
 async function fetchAll(){
   const url = apiUrl();
   if (!url) throw new Error("NOT_CONFIGURED");
@@ -28,22 +45,11 @@ async function fetchAll(){
   const data = await res.json();
   if (data.error) throw new Error(data.error);
   cache = {
-    sales: (data.sales || []).map(normalizeSalesRow),
+    files: (data.files || []).map(normalizeFileRow),
     targets: (data.targets || []).map(normalizeTargetRow),
-    uploads: data.uploads || [],
     meta: data.meta || {}
   };
   return cache;
-}
-
-function normalizeSalesRow(r){
-  return {
-    id: r.id, uploadId: r.uploadId, date: r.date, period: r.period,
-    store: r.store, salesperson: r.salesperson, qty: Number(r.qty) || 0, bill: r.bill || ""
-  };
-}
-function normalizeTargetRow(r){
-  return { key: r.key, store: r.store, salesperson: r.salesperson, period: r.period, target: Number(r.target) || 0 };
 }
 
 async function post(action, payload){
@@ -67,21 +73,34 @@ async function ensureCache(){
 }
 
 export const DB = {
-  async getAllSales(){ return (await ensureCache()).sales; },
+  async getFiles(){ return (await ensureCache()).files; },
   async getAllTargets(){ return (await ensureCache()).targets; },
-  async getAllUploads(){ return (await ensureCache()).uploads; },
 
-  async addSalesRecords(records){
-    const r = await post("addSales", { records });
-    await fetchAll();
-    return r.count;
+  // Fetches one file's raw content on demand (base64) — not cached in
+  // getAll, since files can be large and most loads only need metadata
+  // plus a re-parse of the sales-type ones.
+  async getFileContent(id){
+    const url = apiUrl();
+    if (!url) throw new Error("NOT_CONFIGURED");
+    const res = await fetch(`${url}?action=getFileContent&id=${encodeURIComponent(id)}`);
+    if (!res.ok) throw new Error("Request failed: " + res.status);
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    return data; // { name, base64 }
   },
-  async deleteSalesByUpload(uploadId){
-    await post("deleteSalesByUpload", { uploadId });
+
+  async uploadFile(meta){
+    // meta: { name, base64, mimeType, type, headerRowIndex, mapping, rows, uploadedAt }
+    const r = await post("uploadFile", meta);
+    await fetchAll();
+    return r.id;
+  },
+  async deleteFile(id){
+    await post("deleteFile", { id });
     await fetchAll();
   },
-  async clearSales(){
-    await post("clearSales", {});
+  async clearFiles(){
+    await post("clearFiles", {});
     await fetchAll();
   },
 
@@ -96,20 +115,6 @@ export const DB = {
   },
   async clearTargets(){
     await post("clearTargets", {});
-    await fetchAll();
-  },
-
-  async addUpload(meta){
-    const r = await post("addUpload", meta);
-    await fetchAll();
-    return r.id;
-  },
-  async deleteUpload(id){
-    await post("deleteUpload", { id });
-    await fetchAll();
-  },
-  async clearUploads(){
-    await post("clearUploads", {});
     await fetchAll();
   },
 

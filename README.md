@@ -3,14 +3,20 @@
 A salesperson performance dashboard: upload sales exports, track quantity
 sold against target, manage targets, and see who needs support to hit the
 next one — across multiple stores. The frontend is static HTML/CSS/JS for
-GitHub Pages; data lives centrally in a Google Sheet via a small Apps
-Script backend, so opening the site from any browser or device shows the
-same data.
+GitHub Pages.
+
+Sales data works like an **attachment**, not a database: each file you
+upload is stored as-is in a Google Drive folder via a small Apps Script
+backend, and the site re-reads and re-parses it in the browser every time
+it loads. So opening the site from any browser or device shows the same
+data — until you remove that file, it stays. Targets (typed in or imported
+on the Targets tab) are the one thing stored as structured rows, since
+they're edited cell-by-cell in the app.
 
 Price/sale-value tracking is switched off for now — everything is measured
 in **quantity (units sold)**.
 
-## 1. Backend setup (Google Sheet + Apps Script)
+## 1. Backend setup (Google Sheet + Apps Script + Drive)
 
 1. Create a new Google Sheet (any name — e.g. "Ledger Data"). You don't
    need to add any tabs or headers yourself; the script creates them.
@@ -30,21 +36,25 @@ in **quantity (units sold)**.
    - Type: **Web app**
    - Execute as: **Me**
    - Who has access: **Anyone**
-7. Click **Deploy**, authorize the script when prompted (it only touches
-   this one Sheet), and copy the **Web app URL** it gives you — it looks
-   like `https://script.google.com/macros/s/AKfycb.../exec`.
-8. Keep that URL — you'll paste it into the site in step 3 below.
+7. Click **Deploy**. This time the authorization prompt will ask for two
+   permissions — access to this Sheet **and** to Google Drive (the script
+   creates a folder called "Ledger Sales Performance Files" there to hold
+   your uploaded files). Approve both — it only ever touches that one
+   folder and this one Sheet.
+8. Copy the **Web app URL** it gives you — it looks like
+   `https://script.google.com/macros/s/AKfycb.../exec`. Keep it — you'll
+   paste it into the site in step 3 below.
 
-If you ever change the script's code (including fixing the Spreadsheet ID),
-use **Deploy → Manage deployments → Edit → New version → Deploy** so the
-same URL picks up the change — saving the file in the editor alone does
-**not** update a live deployment.
+If you ever change the script's code (including fixing the Spreadsheet
+ID), use **Deploy → Manage deployments → Edit → New version → Deploy** so
+the same URL picks up the change — saving the file in the editor alone
+does **not** update a live deployment.
 
-### If you're already stuck on "Couldn't reach the backend"
+### If you're stuck on "Couldn't reach the backend"
 
 1. Open your Web App URL directly in a browser tab with `?action=getAll`
    on the end, e.g. `https://script.google.com/macros/s/AKfycb.../exec?action=getAll`.
-   - If you see readable JSON like `{"sales":[],"targets":[],...}` — the
+   - If you see readable JSON like `{"files":[],"targets":[],...}` — the
      backend itself is fine; double-check the URL was pasted into the site
      with no extra spaces or line breaks.
    - If you see `{"error":"Set SPREADSHEET_ID..."}` — go back and do step 4
@@ -53,6 +63,10 @@ same URL picks up the change — saving the file in the editor alone does
      "Who has access" isn't set to **Anyone**. Go to **Deploy → Manage
      deployments → Edit (pencil icon)**, change it, and deploy a new
      version.
+   - If you see `{"error":"...Drive..."}` or a permissions-related error —
+     the Drive authorization from step 7 wasn't completed. Go to
+     **Deploy → Manage deployments → Edit**, deploy a **New version**, and
+     make sure you approve both permissions when prompted this time.
    - If you see any other error message in the JSON, it'll say exactly
      what broke — the site now surfaces that same message in its toast
      notification too.
@@ -85,8 +99,9 @@ same URL picks up the change — saving the file in the editor alone does
 Open the site and go to the **Data** tab. Paste the Web App URL from step 1
 into **Connect your Google Sheet** and click **Save & connect**. That's a
 one-time step per browser you use to manage the connection — once saved,
-every upload, target, and edit goes straight to the Sheet, so any other
-browser or device that connects to the *same* URL sees the same data.
+every upload, target, and edit goes to the same backend, so any other
+browser or device that connects to the *same* URL sees the same files and
+targets.
 
 (Under the hood the URL is kept in that browser's local storage purely as
 a pointer to your backend — it's not where any of your data lives.)
@@ -112,9 +127,15 @@ any ERP). Ledger reads the file and:
    - **Quantity sold** (required)
    - **Bill / invoice no.** (optional — used for units-per-bill)
 
-You can upload as many files as you like (e.g. one export per month); rows
-are merged. To undo an upload, remove it from **Upload history** on the
-Data tab — that removes exactly the rows that came from that file.
+Once you confirm, the file itself — plus the column mapping you just set
+up — is stored in your Drive folder. You won't be asked to map that file
+again; the next time the site loads (any browser, any device), it silently
+re-downloads and re-parses every stored file to rebuild the dashboard.
+
+You can upload as many files as you like (e.g. one export per month) — they
+combine. To remove one, use **Remove** next to it in **Upload history** on
+the Data tab; its data disappears from every view immediately, and the
+file is deleted from Drive.
 
 ## Salespeople and Targets tabs — every month as a column
 
@@ -138,7 +159,9 @@ the commission quantity.
 
 To import targets in bulk, use **Import targets file** — same header-row
 detection and column-matching flow as a sales upload, matching Store,
-Salesperson, Period and Commission Quantity columns.
+Salesperson, Period and Commission Quantity columns. Unlike sales files,
+imported targets are written as individual rows straight away (so each
+cell stays independently editable), not kept as an attached file.
 
 **Suggest next-period targets** looks at units sold for the period
 selected in the top-right filter (or the latest period if "All periods" is
@@ -164,8 +187,14 @@ than a month-by-month table.
 
 ## Data & privacy
 
-Sales rows, targets, and upload history live in the Google Sheet behind
-your Apps Script deployment — not in the browser. Anyone with the Web App
-URL and the "Save & connect" step can read and write that data, so treat
-the URL the way you'd treat a shared spreadsheet link. **Export data** on
-the top bar still works for a CSV backup any time.
+Uploaded files live in the Drive folder behind your Apps Script
+deployment; targets and settings live in the Google Sheet next to it —
+neither lives in the browser. Anyone with the Web App URL and the "Save &
+connect" step can read and write that data, so treat the URL the way
+you'd treat a shared Drive folder link. **Export data** on the top bar
+still works for a CSV backup any time.
+
+Since every load re-downloads and re-parses each stored sales file, sites
+with a large number of files or very large exports will take a little
+longer to open than a plain database-backed dashboard would — that's the
+trade-off for not writing anything row-by-row into the Sheet.
