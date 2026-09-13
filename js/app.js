@@ -4,7 +4,7 @@ import {
   guessMapping, buildSalesRecords, buildTargetRecords
 } from "./parse.js";
 import {
-  filterSales, filterTargets, aggregateByPerson, aggregateByStore, totals,
+  filterSales, filterTargets, aggregateByPerson, aggregateByPersonMonthly, aggregateByStore, totals,
   previousPeriod, nextPeriod, generateInsights, sumQty
 } from "./insights.js";
 import { renderTrendChart } from "./charts.js";
@@ -63,7 +63,7 @@ async function loadData(){
     $("#growthRate").value = state.growthRate;
   } catch (err){
     console.error(err);
-    toast("Couldn't reach the backend — check the connection URL on the Data tab");
+    toast("Couldn't reach the backend: " + (err.message || err) + " — check the Data tab");
   }
   refreshFilters();
   renderAll();
@@ -261,40 +261,51 @@ function rowToPersonTr(r){
 
 /* ============ People view ============ */
 function renderPeople(){
-  const sales = filterSales(state.sales, state.store, state.period);
-  const targets = filterTargets(state.targets, state.store, state.period);
-  let rows = aggregateByPerson(sales, targets);
+  // Monthly-columns view: store filter applies, period filter doesn't
+  // (every period is shown as its own set of columns).
+  const sales = filterSales(state.sales, state.store, "__all__");
+  const targets = filterTargets(state.targets, state.store, "__all__");
+  const periods = [...new Set([...sales.map(r => r.period), ...targets.map(r => r.period)])].sort();
+  let rows = aggregateByPersonMonthly(sales, targets, periods);
 
   const q = $("#peopleSearch").value.trim().toLowerCase();
   if (q) rows = rows.filter(r => r.salesperson.toLowerCase().includes(q));
 
   const { key, dir } = state.peopleSort;
   rows.sort((a, b) => {
-    let av = key === "name" ? a.salesperson : key === "store" ? a.store : key === "achv" ? (a.achv ?? -1) : a[key];
-    let bv = key === "name" ? b.salesperson : key === "store" ? b.store : key === "achv" ? (b.achv ?? -1) : b[key];
+    let av = key === "name" ? a.salesperson : key === "store" ? a.store : a.totalActual;
+    let bv = key === "name" ? b.salesperson : key === "store" ? b.store : b.totalActual;
     if (typeof av === "string") return dir === "asc" ? av.localeCompare(bv) : bv.localeCompare(av);
     return dir === "asc" ? av - bv : bv - av;
   });
 
   $("#peopleEmpty").classList.toggle("hidden", rows.length > 0);
+
+  $("#peopleTable thead").innerHTML = `
+    <tr>
+      <th rowspan="2" data-sort="name">Salesperson</th>
+      <th rowspan="2" data-sort="store">Store</th>
+      ${periods.map(p => `<th colspan="2" class="month-head">${formatPeriod(p)}</th>`).join("")}
+      <th rowspan="2" data-sort="total">Total actual</th>
+    </tr>
+    <tr>
+      ${periods.map(() => `<th class="sub-head">Commission</th><th class="sub-head">Actual Commission</th>`).join("")}
+    </tr>`;
+
   $("#peopleTable tbody").innerHTML = rows.map(r => `
     <tr data-name="${escapeAttr(r.salesperson)}" data-store="${escapeAttr(r.store)}">
       <td>${escapeHtml(r.salesperson)}</td>
       <td>${escapeHtml(r.store)}</td>
-      <td>${fmt(r.actual)}</td>
-      <td>${r.target ? fmt(r.target) : "\u2014"}</td>
-      <td>${r.target ? `<span class="tag ${r.achv >= 100 ? "tag-good" : r.achv >= 80 ? "tag-mid" : "tag-bad"}">${pct(r.achv)}</span>` : "\u2014"}</td>
-      <td>${r.bills || "\u2014"}</td>
-      <td>${r.avgPerBill ? r.avgPerBill.toFixed(1) : "\u2014"}</td>
+      ${periods.map(p => {
+        const cell = r.byPeriod[p];
+        return `<td class="pivot-first">${cell.target ? fmt(cell.target) : "\u2014"}</td><td>${fmt(cell.actual)}</td>`;
+      }).join("")}
+      <td class="pivot-first">${fmt(r.totalActual)}</td>
     </tr>`).join("");
 
   $$("#peopleTable tbody tr").forEach(tr => {
     tr.addEventListener("click", () => openDrawer(tr.dataset.name, tr.dataset.store));
   });
-}
-
-function wirePeopleView(){
-  $("#peopleSearch").addEventListener("input", renderPeople);
   $$("#peopleTable thead th[data-sort]").forEach(th => {
     th.addEventListener("click", () => {
       const key = th.dataset.sort;
@@ -306,6 +317,10 @@ function wirePeopleView(){
       renderPeople();
     });
   });
+}
+
+function wirePeopleView(){
+  $("#peopleSearch").addEventListener("input", renderPeople);
 }
 
 /* ============ Drawer (salesperson detail) ============ */
@@ -327,15 +342,15 @@ function openDrawer(name, store){
   const body = $("#drawerBody");
   body.innerHTML = `
     <div class="hero-stats" style="grid-template-columns: 1fr 1fr 1fr; margin-bottom:18px;">
-      <div class="stat-card"><span class="stat-label">Total units sold</span><span class="stat-val">${fmt(totalActual)}</span></div>
-      <div class="stat-card"><span class="stat-label">Total target</span><span class="stat-val">${totalTarget ? fmt(totalTarget) : "\u2014"}</span></div>
+      <div class="stat-card"><span class="stat-label">Total Actual Commission</span><span class="stat-val">${fmt(totalActual)}</span></div>
+      <div class="stat-card"><span class="stat-label">Total Commission</span><span class="stat-val">${totalTarget ? fmt(totalTarget) : "\u2014"}</span></div>
       <div class="stat-card"><span class="stat-label">Achievement</span><span class="stat-val">${totalTarget ? pct((totalActual / totalTarget) * 100) : "\u2014"}</span></div>
     </div>
     <h4 style="font-size:13.5px;margin-bottom:8px;">Period trend</h4>
     <div class="drawer-sparkline" id="drawerChart"></div>
     <h4 style="font-size:13.5px;margin:18px 0 8px;">By period</h4>
     <table class="ledger">
-      <thead><tr><th>Period</th><th>Units sold</th><th>Target</th><th>Achv.</th></tr></thead>
+      <thead><tr><th>Period</th><th>Actual Commission</th><th>Commission</th><th>Achv.</th></tr></thead>
       <tbody>
         ${points.slice().reverse().map(p => `
           <tr>
@@ -353,36 +368,54 @@ function openDrawer(name, store){
 
 /* ============ Targets view ============ */
 function renderTargets(){
-  const sales = filterSales(state.sales, state.store, state.period);
-  const targets = filterTargets(state.targets, state.store, state.period);
-  const rows = aggregateByPerson(sales, targets).filter(r => r.target > 0 || r.actual > 0);
+  // Monthly-columns view, same as Salespeople — every period gets its own
+  // editable Commission cell, ignoring the period filter.
+  const sales = filterSales(state.sales, state.store, "__all__");
+  const targets = filterTargets(state.targets, state.store, "__all__");
+  const periods = [...new Set([...sales.map(r => r.period), ...targets.map(r => r.period)])].sort();
+  const rows = aggregateByPersonMonthly(sales, targets, periods).filter(r => r.totalActual > 0 || r.totalTarget > 0);
 
   $("#targetsEmpty").classList.toggle("hidden", rows.length > 0);
+
+  $("#targetsTable thead").innerHTML = `
+    <tr>
+      <th rowspan="2">Salesperson</th>
+      <th rowspan="2">Store</th>
+      ${periods.map(p => `<th colspan="3" class="month-head">${formatPeriod(p)}</th>`).join("")}
+    </tr>
+    <tr>
+      ${periods.map(() => `<th class="sub-head">Commission</th><th class="sub-head">Actual Commission</th><th class="sub-head">Achv.</th>`).join("")}
+    </tr>`;
+
   $("#targetsTable tbody").innerHTML = rows.map(r => `
     <tr>
       <td>${escapeHtml(r.salesperson)}</td>
       <td>${escapeHtml(r.store)}</td>
-      <td>${state.period === "__all__" ? "All periods" : formatPeriod(state.period)}</td>
-      <td>${fmt(r.actual)}</td>
-      <td><input type="number" class="target-input" data-store="${escapeAttr(r.store)}" data-name="${escapeAttr(r.salesperson)}" value="${r.target || ""}" placeholder="Set qty target" ${state.period === "__all__" ? "disabled title=\"Pick a specific period to edit\"" : ""}></td>
-      <td>${r.target ? `<span class="tag ${r.achv >= 100 ? "tag-good" : r.achv >= 80 ? "tag-mid" : "tag-bad"}">${pct(r.achv)}</span>` : "\u2014"}</td>
-      <td></td>
+      ${periods.map(p => {
+        const cell = r.byPeriod[p];
+        const achv = cell.target ? Math.round((cell.actual / cell.target) * 100) : null;
+        const tagClass = achv === null ? "" : achv >= 100 ? "tag-good" : achv >= 80 ? "tag-mid" : "tag-bad";
+        return `
+          <td class="pivot-first"><input type="number" class="target-input" data-store="${escapeAttr(r.store)}" data-name="${escapeAttr(r.salesperson)}" data-period="${p}" value="${cell.target || ""}" placeholder="\u2014"></td>
+          <td>${fmt(cell.actual)}</td>
+          <td>${achv === null ? "\u2014" : `<span class="tag ${tagClass}">${achv}%</span>`}</td>`;
+      }).join("")}
     </tr>`).join("");
 
   $$(".target-input").forEach(input => {
     input.addEventListener("change", async (e) => {
       const val = Number(e.target.value);
-      if (!val || state.period === "__all__") return;
-      const store = e.target.dataset.store, salesperson = e.target.dataset.name;
-      const key = `${store}|${salesperson}|${state.period}`;
+      if (!val) return;
+      const store = e.target.dataset.store, salesperson = e.target.dataset.name, period = e.target.dataset.period;
+      const key = `${store}|${salesperson}|${period}`;
       try {
-        await DB.putTargets([{ key, store, salesperson, period: state.period, target: val }]);
+        await DB.putTargets([{ key, store, salesperson, period, target: val }]);
         state.targets = await DB.getAllTargets();
-        toast("Target saved");
+        toast("Commission saved");
         renderAll();
       } catch (err){
         console.error(err);
-        toast("Couldn't save — check the connection on the Data tab");
+        toast("Couldn't save: " + (err.message || err));
       }
     });
   });
@@ -391,22 +424,25 @@ function renderTargets(){
 function wireTargetsView(){
   $("#addTargetRowBtn").addEventListener("click", async () => {
     if (!isConfigured()){ toast("Connect your Google Sheet first (Data tab)"); return; }
-    if (state.period === "__all__"){
-      toast("Pick a specific period first, so the target has somewhere to go");
-      return;
-    }
     const store = prompt("Store name:", state.store !== "__all__" ? state.store : "");
     if (!store) return;
     const salesperson = prompt("Salesperson name:");
     if (!salesperson) return;
-    const target = Number(prompt("Target quantity (pcs):"));
+    const period = prompt("Period (YYYY-MM), e.g. 2026-09:", state.period !== "__all__" ? state.period : "");
+    if (!period || !/^\d{4}-\d{2}$/.test(period.trim())){ toast("Enter the period as YYYY-MM"); return; }
+    const target = Number(prompt("Commission (units):"));
     if (!target) return;
-    const key = `${store.trim()}|${salesperson.trim()}|${state.period}`;
-    await DB.putTargets([{ key, store: store.trim(), salesperson: salesperson.trim(), period: state.period, target }]);
-    state.targets = await DB.getAllTargets();
-    refreshFilters();
-    renderAll();
-    toast("Target added");
+    const key = `${store.trim()}|${salesperson.trim()}|${period.trim()}`;
+    try {
+      await DB.putTargets([{ key, store: store.trim(), salesperson: salesperson.trim(), period: period.trim(), target }]);
+      state.targets = await DB.getAllTargets();
+      refreshFilters();
+      renderAll();
+      toast("Commission added");
+    } catch (err){
+      console.error(err);
+      toast("Couldn't save: " + (err.message || err));
+    }
   });
 
   $("#growthRate").addEventListener("change", async (e) => {
@@ -496,7 +532,7 @@ const TARGET_FIELDS = [
   { key: "store", label: "Store / branch", required: false },
   { key: "salesperson", label: "Salesperson", required: true },
   { key: "period", label: "Period / month", required: true },
-  { key: "target", label: "Target quantity (pcs)", required: true }
+  { key: "target", label: "Commission quantity (pcs)", required: true }
 ];
 
 async function handleFileForMapping(file, type){
@@ -670,7 +706,7 @@ async function confirmMapping(){
     }
   } catch (err){
     console.error(err);
-    toast("Couldn't reach the backend — check the connection on the Data tab");
+    toast("Couldn't reach the backend: " + (err.message || err));
     closeMapModal();
     return;
   }
@@ -701,7 +737,7 @@ async function confirmSuggestedTargets(){
     toast(`Saved ${rows.length} targets for ${formatPeriod(next)}`);
   } catch (err){
     console.error(err);
-    toast("Couldn't save — check the connection on the Data tab");
+    toast("Couldn't save: " + (err.message || err));
   }
 }
 
@@ -731,7 +767,7 @@ function renderDataView(){
         toast("Upload removed");
       } catch (err){
         console.error(err);
-        toast("Couldn't remove — check the connection on the Data tab");
+        toast("Couldn't remove: " + (err.message || err));
       }
     });
   });
@@ -750,7 +786,7 @@ function wireDataView(){
       toast("All data cleared");
     } catch (err){
       console.error(err);
-      toast("Couldn't clear — check the connection on the Data tab");
+      toast("Couldn't clear: " + (err.message || err));
     }
   });
 }

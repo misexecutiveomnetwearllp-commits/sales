@@ -3,7 +3,12 @@
  * Deploy as a Web App (Execute as: Me, Who has access: Anyone).
  * Backed by a Google Sheet with tabs: Sales, Targets, Uploads, Meta
  * (created automatically on first use — nothing to set up by hand).
+ *
+ * IMPORTANT: paste your Google Sheet's ID below before deploying.
+ * Find it in the Sheet's URL: docs.google.com/spreadsheets/d/<THIS PART>/edit
+ * (Web apps have no "active spreadsheet", so this can't be done automatically.)
  */
+const SPREADSHEET_ID = "PASTE_YOUR_SPREADSHEET_ID_HERE";
 
 const SHEETS = {
   sales: { name: "Sales", headers: ["id", "uploadId", "date", "period", "store", "salesperson", "qty", "bill"] },
@@ -12,8 +17,15 @@ const SHEETS = {
   meta: { name: "Meta", headers: ["key", "value"] }
 };
 
+function getSpreadsheet_(){
+  if (!SPREADSHEET_ID || SPREADSHEET_ID.indexOf("PASTE_") === 0){
+    throw new Error("Set SPREADSHEET_ID at the top of Code.gs to your Google Sheet's ID, then redeploy (Deploy \u2192 Manage deployments \u2192 Edit \u2192 New version).");
+  }
+  return SpreadsheetApp.openById(SPREADSHEET_ID);
+}
+
 function getSheet_(kind){
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ss = getSpreadsheet_();
   const def = SHEETS[kind];
   let sheet = ss.getSheetByName(def.name);
   if (!sheet){
@@ -52,18 +64,22 @@ function findRowIndexByValue_(sheet, colIndex, value){
 function doGet(e){
   const action = (e.parameter && e.parameter.action) || "getAll";
   let result;
-  if (action === "getAll"){
-    const metaRows = sheetToObjects_(getSheet_("meta"));
-    const meta = {};
-    metaRows.forEach(r => { meta[r.key] = r.value; });
-    result = {
-      sales: sheetToObjects_(getSheet_("sales")),
-      targets: sheetToObjects_(getSheet_("targets")),
-      uploads: sheetToObjects_(getSheet_("uploads")),
-      meta
-    };
-  } else {
-    result = { error: "Unknown action: " + action };
+  try {
+    if (action === "getAll"){
+      const metaRows = sheetToObjects_(getSheet_("meta"));
+      const meta = {};
+      metaRows.forEach(r => { meta[r.key] = r.value; });
+      result = {
+        sales: sheetToObjects_(getSheet_("sales")),
+        targets: sheetToObjects_(getSheet_("targets")),
+        uploads: sheetToObjects_(getSheet_("uploads")),
+        meta
+      };
+    } else {
+      result = { error: "Unknown action: " + action };
+    }
+  } catch (err){
+    result = { error: String(err) };
   }
   return ContentService.createTextOutput(JSON.stringify(result)).setMimeType(ContentService.MimeType.JSON);
 }

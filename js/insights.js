@@ -63,6 +63,35 @@ export function aggregateByStore(sales, targets){
   return rows;
 }
 
+// Like aggregateByPerson, but keeps every period as its own bucket —
+// used for the monthly-columns view on the Salespeople and Targets tabs.
+export function aggregateByPersonMonthly(sales, targets, periods){
+  const map = new Map(); // key = store|salesperson
+  const ensure = (store, salesperson) => {
+    const key = `${store}|${salesperson}`;
+    if (!map.has(key)) map.set(key, { store, salesperson, byPeriod: {}, totalActual: 0, totalTarget: 0 });
+    return map.get(key);
+  };
+  for (const r of sales){
+    const row = ensure(r.store, r.salesperson);
+    if (!row.byPeriod[r.period]) row.byPeriod[r.period] = { actual: 0, target: 0 };
+    row.byPeriod[r.period].actual += r.qty || 0;
+    row.totalActual += r.qty || 0;
+  }
+  for (const t of targets){
+    const row = ensure(t.store, t.salesperson);
+    if (!row.byPeriod[t.period]) row.byPeriod[t.period] = { actual: 0, target: 0 };
+    row.byPeriod[t.period].target += t.target;
+    row.totalTarget += t.target;
+  }
+  const rows = [...map.values()].map(r => {
+    periods.forEach(p => { if (!r.byPeriod[p]) r.byPeriod[p] = { actual: 0, target: 0 }; });
+    return r;
+  });
+  rows.sort((a, b) => b.totalActual - a.totalActual);
+  return rows;
+}
+
 export function totals(rows){
   return rows.reduce((acc, r) => {
     acc.actual += r.actual;

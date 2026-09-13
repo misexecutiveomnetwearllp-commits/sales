@@ -17,19 +17,46 @@ in **quantity (units sold)**.
 2. In the Sheet, go to **Extensions → Apps Script**.
 3. Delete the default `Code.gs` contents and paste in the contents of
    `appsscript/Code.gs` from this project.
-4. Click the gear icon (Project Settings) → under **General**, make sure
+4. At the top of the pasted code, find the line
+   `const SPREADSHEET_ID = "PASTE_YOUR_SPREADSHEET_ID_HERE";` and replace
+   the placeholder with your Sheet's ID — copy it from the Sheet's own URL:
+   `docs.google.com/spreadsheets/d/`**`<this long part>`**`/edit`.
+   (This step matters: Apps Script web apps don't automatically know which
+   spreadsheet they belong to, so skipping it is the most common reason
+   the connection fails with a "couldn't reach the backend" error.)
+5. Click the gear icon (Project Settings) → under **General**, make sure
    the runtime is **V8**. (It is by default.)
-5. Click **Deploy → New deployment**.
+6. Click **Deploy → New deployment**.
    - Type: **Web app**
    - Execute as: **Me**
    - Who has access: **Anyone**
-6. Click **Deploy**, authorize the script when prompted (it only touches
+7. Click **Deploy**, authorize the script when prompted (it only touches
    this one Sheet), and copy the **Web app URL** it gives you — it looks
    like `https://script.google.com/macros/s/AKfycb.../exec`.
-7. Keep that URL — you'll paste it into the site in step 3 below.
+8. Keep that URL — you'll paste it into the site in step 3 below.
 
-If you ever change the script's code, use **Deploy → Manage deployments →
-Edit → New version** so the same URL picks up the changes.
+If you ever change the script's code (including fixing the Spreadsheet ID),
+use **Deploy → Manage deployments → Edit → New version → Deploy** so the
+same URL picks up the change — saving the file in the editor alone does
+**not** update a live deployment.
+
+### If you're already stuck on "Couldn't reach the backend"
+
+1. Open your Web App URL directly in a browser tab with `?action=getAll`
+   on the end, e.g. `https://script.google.com/macros/s/AKfycb.../exec?action=getAll`.
+   - If you see readable JSON like `{"sales":[],"targets":[],...}` — the
+     backend itself is fine; double-check the URL was pasted into the site
+     with no extra spaces or line breaks.
+   - If you see `{"error":"Set SPREADSHEET_ID..."}` — go back and do step 4
+     above, then redeploy with **New version**.
+   - If you see a Google sign-in page instead of JSON — the deployment's
+     "Who has access" isn't set to **Anyone**. Go to **Deploy → Manage
+     deployments → Edit (pencil icon)**, change it, and deploy a new
+     version.
+   - If you see any other error message in the JSON, it'll say exactly
+     what broke — the site now surfaces that same message in its toast
+     notification too.
+
 
 ## 2. Putting the site on GitHub Pages
 
@@ -89,25 +116,44 @@ You can upload as many files as you like (e.g. one export per month); rows
 are merged. To undo an upload, remove it from **Upload history** on the
 Data tab — that removes exactly the rows that came from that file.
 
+## Salespeople and Targets tabs — every month as a column
+
+Both tabs show **every month side by side** as its own pair (or trio) of
+columns — they ignore the Period filter at the top (there's nothing to
+filter to, since it's all laid out already); the Store filter still
+narrows things down. Columns are labelled **Commission** (the target) and
+**Actual Commission** (what was actually sold), and on the Targets tab
+each Commission cell is directly editable.
+
 ## Setting targets
 
-On the **Targets** tab, with a specific month selected in the top-right
-period filter, type a quantity target directly into a row — it saves on
-blur/Enter.
+On the **Targets** tab, click into any month's **Commission** cell for a
+salesperson and type a number — it saves on blur/Enter. Every month you
+have data or targets for already has a column, so there's no need to
+change a filter first.
+
+To add a brand-new salesperson/month that has no row yet, use **+ Add
+target row** — it asks for store, salesperson, period (as `YYYY-MM`) and
+the commission quantity.
 
 To import targets in bulk, use **Import targets file** — same header-row
 detection and column-matching flow as a sales upload, matching Store,
-Salesperson, Period and Target Quantity columns.
+Salesperson, Period and Commission Quantity columns.
 
-**Suggest next-period targets** looks at units sold for the selected
-period (or the latest period if "All periods" is selected), applies the
-growth percentage set at the top of the tab, and shows an editable review
-table before saving anything as next month's targets.
+**Suggest next-period targets** looks at units sold for the period
+selected in the top-right filter (or the latest period if "All periods" is
+selected), applies the growth percentage set at the top of the tab, and
+shows an editable review table before saving anything as next month's
+commission targets.
 
 ## Reading the dashboard
 
-- The ring shows overall achievement against target (in units) for
-  whatever store/period filter is active at the top.
+The Dashboard is the one place that still respects the Period filter — it's
+a snapshot of one period (or a combined view across "All periods") rather
+than a month-by-month table.
+
+- The ring shows overall achievement — Actual Commission against
+  Commission — for whatever store/period filter is active at the top.
 - **Needs attention** and **Leading the floor** surface the salespeople
   furthest below and above target.
 - **What to focus on** is a short set of plain-language observations

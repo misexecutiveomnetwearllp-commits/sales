@@ -88,11 +88,11 @@
               </div>
               <div class="hero-ring-meta">
                 <div class="hero-figure">
-                  <span class="hero-figure-label">Achieved</span>
+                  <span class="hero-figure-label">Actual Commission</span>
                   <span class="hero-figure-val" id="heroAchieved">0</span>
                 </div>
                 <div class="hero-figure">
-                  <span class="hero-figure-label">Target</span>
+                  <span class="hero-figure-label">Commission</span>
                   <span class="hero-figure-val" id="heroTarget">0</span>
                 </div>
                 <div class="hero-figure">
@@ -125,7 +125,7 @@
           <div class="panel">
             <div class="panel-head">
               <h3>Store performance</h3>
-              <span class="panel-sub">Achieved vs target, current selection</span>
+              <span class="panel-sub">Actual commission vs commission, current selection</span>
             </div>
             <div id="storeBars" class="bars"></div>
           </div>
@@ -174,20 +174,13 @@
             <input type="search" id="peopleSearch" placeholder="Search by name&hellip;">
           </div>
         </div>
-        <table class="ledger ledger-wide" id="peopleTable">
-          <thead>
-            <tr>
-              <th data-sort="name">Salesperson</th>
-              <th data-sort="store">Store</th>
-              <th data-sort="actual">Actual</th>
-              <th data-sort="target">Target</th>
-              <th data-sort="achv">Achv. %</th>
-              <th data-sort="bills">Bills</th>
-              <th data-sort="abv">Avg/bill</th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
+        <p class="panel-sub" style="margin-bottom:8px;">Every month shown side by side &mdash; the store filter above still applies, period filter doesn't (there's nothing to filter to, it's all here).</p>
+        <div class="pivot-scroll">
+          <table class="ledger ledger-wide ledger-pivot" id="peopleTable">
+            <thead></thead>
+            <tbody></tbody>
+          </table>
+        </div>
         <p class="ledger-empty" id="peopleEmpty">No data for this selection yet.</p>
       </section>
 
@@ -205,21 +198,14 @@
             <button class="btn btn-primary" id="suggestTargetsBtn">Suggest next-period targets</button>
           </div>
         </div>
+        <p class="panel-sub" style="margin-bottom:8px;">Every month as its own column &mdash; edit Commission directly in any cell.</p>
 
-        <table class="ledger ledger-wide" id="targetsTable">
-          <thead>
-            <tr>
-              <th>Salesperson</th>
-              <th>Store</th>
-              <th>Period</th>
-              <th>Actual</th>
-              <th>Target</th>
-              <th>Achv. %</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
+        <div class="pivot-scroll">
+          <table class="ledger ledger-wide ledger-pivot" id="targetsTable">
+            <thead></thead>
+            <tbody></tbody>
+          </table>
+        </div>
         <p class="ledger-empty" id="targetsEmpty">No targets set for this selection yet.</p>
 
         <div class="panel-foot-actions">
@@ -352,7 +338,7 @@
       <p class="modal-hint" id="suggestHint"></p>
       <div class="table-scroll">
         <table class="ledger" id="suggestTable">
-          <thead><tr><th>Salesperson</th><th>Store</th><th>This period</th><th>Suggested next</th></tr></thead>
+          <thead><tr><th>Salesperson</th><th>Store</th><th>Actual Commission</th><th>Suggested Commission</th></tr></thead>
           <tbody></tbody>
         </table>
       </div>

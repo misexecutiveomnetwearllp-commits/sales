@@ -305,6 +305,27 @@ button{ font-family: inherit; }
 .header-chip input.header-label:focus{ outline: 1px solid var(--marigold); border-radius:3px; }
 th.is-excluded, td.is-excluded{ opacity: .4; text-decoration: line-through; }
 
+/* ============ Pivot (monthly-columns) tables ============ */
+.pivot-scroll{ overflow-x: auto; margin-bottom: 8px; }
+.ledger-pivot{ white-space: nowrap; }
+.ledger-pivot th, .ledger-pivot td{ padding: 7px 9px; }
+.ledger-pivot th.month-head{
+  text-align:center; background: var(--paper); border-left: 2px solid var(--line);
+  font-size: 11px;
+}
+.ledger-pivot th.sub-head{
+  text-align:right; font-size: 10.5px; font-weight:500; color: var(--ink-soft);
+  border-left: 2px solid var(--line);
+}
+.ledger-pivot td.pivot-first{ border-left: 2px solid var(--line); }
+.ledger-pivot td{ text-align:right; }
+.ledger-pivot td:first-child, .ledger-pivot td:nth-child(2),
+.ledger-pivot th:first-child, .ledger-pivot th:nth-child(2){ text-align:left; }
+.ledger-pivot input.target-input{
+  width: 64px; text-align:right; padding: 4px 6px; border:1px solid var(--line); border-radius: var(--radius-sm);
+  font-size: 12.5px;
+}
+
 /* ============ Responsive ============ */
 @media (max-width: 900px){
   .rail{ display:none; }
