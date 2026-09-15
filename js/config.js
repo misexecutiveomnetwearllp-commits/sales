@@ -17,4 +17,4 @@
  * same as sharing a Drive folder link. Keep the repo private, or keep the
  * site URL to your team.
  */
-export const APPS_SCRIPT_URL = "";
+export const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzUskBArjYW-GPBe3NrjkAOSJezXNKpLEc9TIUavoWhoaLiX7t6Z8vnVwIlJmoVLQXX/exec";
