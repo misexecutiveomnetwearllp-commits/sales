@@ -26,18 +26,13 @@ code{font-size:.92em;background:rgba(0,0,0,.06);padding:1px 4px;border-radius:3p
 /* Header: red bahi-khata cover with ledger ruling and margin lines */
 .band{background-color:var(--bahi);color:#fff;
   background-image:repeating-linear-gradient(180deg,transparent 0 31px,rgba(0,0,0,.13) 31px 32px)}
-.band .wrap{padding-top:16px;padding-bottom:30px}
+.band .wrap{padding-top:14px;padding-bottom:14px}
 .band .wrap::before{content:"";position:absolute;top:0;bottom:0;left:28px;width:6px;
   border-left:1px solid rgba(255,255,255,.3);border-right:1px solid rgba(255,255,255,.3)}
 .band-top{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
 .brand-name{font-family:var(--display);font-weight:600;font-size:23px}
 .sync{font-size:14px;color:rgba(255,255,255,.82);margin-left:14px}
 .band-actions{display:flex;gap:8px}
-.hero{margin-top:26px}
-.hero-label{font-size:17px;color:rgba(255,255,255,.9)}
-.hero-figure{font-family:var(--display);font-weight:700;font-size:clamp(54px,10vw,116px);line-height:.95;margin:6px 0 10px;overflow-wrap:anywhere}
-.hero-delta{font-size:16px;min-height:24px}
-.chip{display:inline-block;background:rgba(0,0,0,.25);border-radius:3px;padding:1px 8px;margin-right:8px;font-weight:600}
 
 .btn{border:1px solid transparent;border-radius:4px;padding:7px 14px;cursor:pointer;font-weight:500;line-height:1.3;background:none}
 .btn-onred{border-color:rgba(255,255,255,.55);color:#fff}
@@ -103,6 +98,36 @@ td.share{min-width:130px;text-align:left}
 .empty p{max-width:520px;margin:0 auto 16px;color:var(--muted)}
 .errbar{background:#FDECEA;color:var(--loss);border:1px solid #F1B8B1;border-radius:6px;padding:12px 14px;margin:20px 0 0}
 
+/* Tabs */
+.tabs{display:flex;gap:4px;margin-top:18px;border-bottom:1px solid var(--rule)}
+.tabs button{border:1px solid transparent;border-bottom:0;background:none;padding:8px 18px;font-family:var(--display);font-weight:600;font-size:19px;color:var(--muted);cursor:pointer;border-radius:5px 5px 0 0;margin-bottom:-1px}
+.tabs button:hover{color:var(--ink)}
+.tabs button[aria-selected="true"]{background:var(--panel);border-color:var(--rule);color:var(--ink);box-shadow:inset 0 3px 0 var(--bahi)}
+.tab-panel .kpis{margin-top:16px}
+#tabTable .panel{margin-top:16px}
+
+/* Month-wise table */
+.pv-controls{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap}
+.pv-controls .fld select,.pv-controls .fld input{width:170px}
+.months-bar{display:flex;gap:8px 12px;align-items:center;flex-wrap:wrap;margin:14px 0 12px;padding-top:12px;border-top:1px solid var(--rule-soft)}
+.months-bar .note{margin:0}
+#monthChips{display:flex;gap:6px;flex-wrap:wrap}
+.mchip{position:relative;cursor:pointer}
+.mchip input{position:absolute;opacity:0;width:1px;height:1px}
+.mchip span{display:inline-block;padding:3px 11px;border:1px solid var(--rule);border-radius:999px;font-size:14px;color:var(--muted);text-decoration:line-through;background:#fff;user-select:none}
+.mchip input:checked+span{background:var(--ink);border-color:var(--ink);color:#fff;text-decoration:none}
+.mchip input:focus-visible+span{outline:3px solid var(--marigold);outline-offset:2px}
+.pv-wrap{overflow:auto;max-height:72vh;border:1px solid var(--rule-soft);border-radius:4px}
+table.pv thead th{position:sticky;top:0;background:#fff;z-index:2}
+table.pv th:first-child,table.pv td:first-child{position:sticky;left:0;background:#fff;z-index:1;text-align:left;white-space:normal;min-width:170px;max-width:280px;box-shadow:1px 0 0 var(--rule)}
+table.pv thead th:first-child{z-index:3}
+table.pv tbody tr:hover td{background:#FBF6E8}
+table.pv .pv-total td{font-weight:600;background:#F4F6F3}
+table.pv td.pv-sum{font-weight:600;box-shadow:-1px 0 0 var(--rule-soft)}
+.sort{border:0;background:none;padding:0;font:inherit;color:inherit;cursor:pointer;white-space:nowrap}
+.sort:hover{color:var(--ink);text-decoration:underline}
+.pv-empty{padding:20px}
+
 /* Drawer */
 .scrim{position:fixed;inset:0;background:rgba(27,36,48,.42);z-index:40;opacity:0;pointer-events:none;transition:opacity .2s}
 .scrim.open{opacity:1;pointer-events:auto}
@@ -149,6 +174,9 @@ dialog .input{width:100%;margin-top:10px}
 
 @media (max-width:1000px){ .s4,.s5,.s6,.s7,.s8{grid-column:span 12} }
 @media (max-width:720px){
+  .pv-controls .fld{flex:1 1 44%}
+  .pv-controls .fld select,.pv-controls .fld input{width:100%}
+  .tabs button{flex:1;padding:8px 10px;font-size:17px}
   .wrap{padding-left:16px;padding-right:16px}
   .band .wrap::before{display:none}
   .sync{display:block;margin-left:0}
@@ -174,11 +202,6 @@ dialog .input{width:100%;margin-top:10px}
         <button class="btn btn-white" id="btnManage" type="button">Manage data</button>
       </div>
     </div>
-    <div class="hero">
-      <div class="hero-label" id="heroLabel">Net sales</div>
-      <div class="hero-figure" id="heroValue">₹0</div>
-      <div class="hero-delta" id="heroDelta"></div>
-    </div>
   </div>
 </header>
 
@@ -188,6 +211,7 @@ dialog .input{width:100%;margin-top:10px}
   <div class="wrap filter-row">
     <div class="fld"><label for="fPreset">Period</label>
       <select id="fPreset">
+        <option value="all">All data</option>
         <option value="latest">Latest month in data</option>
         <option value="thisMonth">This month</option>
         <option value="lastMonth">Last month</option>
@@ -195,7 +219,6 @@ dialog .input{width:100%;margin-top:10px}
         <option value="last30">Last 30 days</option>
         <option value="thisFY">This financial year</option>
         <option value="lastFY">Last financial year</option>
-        <option value="all">All data</option>
         <option value="custom">Custom dates</option>
       </select>
     </div>
@@ -208,7 +231,7 @@ dialog .input{width:100%;margin-top:10px}
     <div class="fld" id="sourceFld"><label for="fSource">File</label><select id="fSource"></select></div>
     <div class="fld-actions">
       <button class="btn btn-plain" id="btnReset" type="button">Reset</button>
-      <button class="btn btn-plain" id="btnExport" type="button">Export CSV</button>
+      <button class="btn btn-plain" id="btnExport" type="button">Export raw data</button>
     </div>
   </div>
 </div>
@@ -229,56 +252,76 @@ dialog .input{width:100%;margin-top:10px}
   </section>
 
   <div id="dash" hidden>
-    <section class="kpis" id="kpis" aria-label="Key figures"></section>
+    <div class="tabs" role="tablist" aria-label="Dashboard views">
+      <button type="button" role="tab" id="tabBtnTable" data-tab="table" aria-controls="tabTable" aria-selected="true">Month-wise table</button>
+      <button type="button" role="tab" id="tabBtnCharts" data-tab="charts" aria-controls="tabCharts" aria-selected="false" tabindex="-1">Charts</button>
+    </div>
 
-    <section class="grid">
-      <article class="panel s8">
-        <div class="panel-head">
-          <div><h2>Sales trend</h2><p class="note" id="trendNote"></p></div>
-          <div class="seg" id="granSeg" role="group" aria-label="Group trend by">
-            <button type="button" data-gran="auto" aria-pressed="true">Auto</button>
-            <button type="button" data-gran="day" aria-pressed="false">Day</button>
-            <button type="button" data-gran="week" aria-pressed="false">Week</button>
-            <button type="button" data-gran="month" aria-pressed="false">Month</button>
-          </div>
+    <section class="tab-panel" id="tabTable" role="tabpanel" aria-labelledby="tabBtnTable">
+      <article class="panel">
+        <div class="pv-controls">
+          <div class="fld"><label for="pvRows">Rows</label><select id="pvRows"></select></div>
+          <div class="fld"><label for="pvMetric">Show</label><select id="pvMetric"></select></div>
+          <div class="fld"><label for="pvSearch">Search rows</label><input type="search" id="pvSearch" placeholder="Type a name"></div>
+          <div class="fld-actions"><button class="btn btn-plain" id="btnPvDownload" type="button">Download table</button></div>
         </div>
-        <div class="chart-box"><canvas id="cTrend" aria-label="Sales trend chart" role="img"></canvas></div>
+        <div class="months-bar">
+          <p class="note">Months to show:</p>
+          <div id="monthChips"></div>
+          <button class="btn btn-plain" id="btnShowAllMonths" type="button" hidden>Show all months</button>
+        </div>
+        <div class="pv-wrap" id="pivot"></div>
+        <p class="note" id="pvNote"></p>
       </article>
+    </section>
 
-      <article class="panel s4" data-need="category">
-        <div class="panel-head"><div><h2>Category mix</h2><p class="note">Share of net sales</p></div></div>
-        <div class="chart-box"><canvas id="cCat" aria-label="Category share chart" role="img"></canvas></div>
-      </article>
+    <section class="tab-panel" id="tabCharts" role="tabpanel" aria-labelledby="tabBtnCharts" hidden>
+      <section class="kpis" id="kpis" aria-label="Key figures"></section>
+      <section class="grid">
+        <article class="panel s8">
+          <div class="panel-head">
+            <div><h2>Sales trend</h2><p class="note" id="trendNote"></p></div>
+            <div class="seg" id="granSeg" role="group" aria-label="Group trend by">
+              <button type="button" data-gran="auto" aria-pressed="true">Auto</button>
+              <button type="button" data-gran="day" aria-pressed="false">Day</button>
+              <button type="button" data-gran="week" aria-pressed="false">Week</button>
+              <button type="button" data-gran="month" aria-pressed="false">Month</button>
+            </div>
+          </div>
+          <div class="chart-box"><canvas id="cTrend" aria-label="Sales trend chart" role="img"></canvas></div>
+        </article>
 
-      <article class="panel s12" data-need="salesman">
-        <div class="panel-head"><div><h2>Salesperson leaderboard</h2><p class="note">Ranked by net sales. The bar compares each person with the top seller.</p></div></div>
-        <div class="tbl-wrap" id="tSalesman"></div>
-      </article>
+        <article class="panel s4" data-need="category">
+          <div class="panel-head"><div><h2>Category mix</h2><p class="note">Share of net sales</p></div></div>
+          <div class="chart-box"><canvas id="cCat" aria-label="Category share chart" role="img"></canvas></div>
+        </article>
 
-      <article class="panel s7" data-need="store">
-        <div class="panel-head"><div><h2>Store performance</h2><p class="note">Ranked by net sales</p></div></div>
-        <div class="tbl-wrap" id="tStore"></div>
-      </article>
+        <article class="panel s12" data-need="salesman">
+          <div class="panel-head"><div><h2>Salesperson leaderboard</h2><p class="note">Ranked by net sales. The bar compares each person with the top seller.</p></div></div>
+          <div class="tbl-wrap" id="tSalesman"></div>
+        </article>
 
-      <article class="panel s5">
-        <div class="panel-head"><div><h2>Day of week</h2><p class="note">Average net sales per trading day. Darker bar is the best day.</p></div></div>
-        <div class="chart-box"><canvas id="cWeek" aria-label="Average sales by day of week" role="img"></canvas></div>
-      </article>
+        <article class="panel s7" data-need="store">
+          <div class="panel-head"><div><h2>Store performance</h2><p class="note">Ranked by net sales</p></div></div>
+          <div class="tbl-wrap" id="tStore"></div>
+        </article>
 
-      <article class="panel s7" data-need="item">
-        <div class="panel-head"><div><h2>Top selling items</h2><p class="note">Ranked by net sales</p></div></div>
-        <div class="tbl-wrap" id="tItem"></div>
-      </article>
+        <article class="panel s5">
+          <div class="panel-head"><div><h2>Day of week</h2><p class="note">Average net sales per trading day. Darker bar is the best day.</p></div></div>
+          <div class="chart-box"><canvas id="cWeek" aria-label="Average sales by day of week" role="img"></canvas></div>
+        </article>
 
-      <article class="panel s5" data-need="brand">
-        <div class="panel-head"><div><h2>Top brands</h2><p class="note">Net sales, top 10</p></div></div>
-        <div class="chart-box"><canvas id="cBrand" aria-label="Top brands chart" role="img"></canvas></div>
-      </article>
+        <article class="panel s7" data-need="item">
+          <div class="panel-head"><div><h2>Top selling items</h2><p class="note">Ranked by net sales</p></div></div>
+          <div class="tbl-wrap" id="tItem"></div>
+        </article>
 
-      <article class="panel s12">
-        <div class="panel-head"><div><h2>Month-wise summary</h2><p class="note">All months in the data, with store, salesperson, category, brand and file filters applied</p></div></div>
-        <div class="tbl-wrap" id="tMonth"></div>
-      </article>
+        <article class="panel s5" data-need="brand">
+          <div class="panel-head"><div><h2>Top brands</h2><p class="note">Net sales, top 10</p></div></div>
+          <div class="chart-box"><canvas id="cBrand" aria-label="Top brands chart" role="img"></canvas></div>
+        </article>
+
+      </section>
     </section>
   </div>
 </main>
@@ -405,7 +448,8 @@ const S = {
   uploads: [], cache: new Map(),
   viewKey: '', adminKey: '', isAdmin: false,
   has: {}, minDate: '', maxDate: '',
-  trendGran: 'auto', showAll: {}, heroAnimated: false,
+  trendGran: 'auto', showAll: {}, tab: 'table',
+  hiddenMonths: new Set(), pvSort: { col: 'total', dir: -1 }, pvRowsChosen: null, pvLast: null,
   up: null, uploading: false
 };
 const charts = {};
@@ -649,6 +693,7 @@ function buildFilterOptions() {
   src.innerHTML = '<option value="">All files</option>' + ready.map(u => `<option value="${esc(u.id)}">${esc(u.fileName)}</option>`).join('');
   src.value = ready.some(u => u.id === cur) ? cur : '';
   $('sourceFld').hidden = ready.length < 2;
+  buildPivotOptions();
 }
 
 /* ---------- filters & periods ---------- */
@@ -764,13 +809,21 @@ function render() {
   const cur = hasData ? filterRows(f, p.from, p.to) : [];
   $('emptyFilter').hidden = !hasData || cur.length > 0;
   $('dash').hidden = !cur.length;
-
-  const prevRows = p.prevFrom && cur.length ? filterRows(f, p.prevFrom, p.prevTo) : null;
-  const c = summarize(cur);
-  const pv = prevRows && prevRows.length ? summarize(prevRows) : null;
-  renderHero(c, pv, p, f);
   if (!cur.length) return;
 
+  $('tabTable').hidden = S.tab !== 'table';
+  $('tabCharts').hidden = S.tab !== 'charts';
+  document.querySelectorAll('[data-tab]').forEach(b => {
+    const on = b.dataset.tab === S.tab;
+    b.setAttribute('aria-selected', String(on));
+    b.tabIndex = on ? 0 : -1;
+  });
+  if (S.tab === 'table') { renderPivot(cur); return; }
+
+  // Charts tab (Chart.js needs a visible canvas, so it is drawn only when this tab is open)
+  const prevRows = p.prevFrom ? filterRows(f, p.prevFrom, p.prevTo) : null;
+  const c = summarize(cur);
+  const pv = prevRows && prevRows.length ? summarize(prevRows) : null;
   document.querySelectorAll('[data-need]').forEach(el => {
     const k = el.dataset.need;
     el.hidden = k === 'store' ? S.has.store < 2 : !S.has[k];
@@ -783,36 +836,123 @@ function render() {
   renderWeekday(cur);
   if (S.has.item) renderItems(cur);
   if (S.has.brand) renderBrands(cur);
-  renderMonths(filterRows(f, '', ''));
 }
 
-function renderHero(c, pv, p, f) {
-  const ctx = [f.store, f.salesman, f.category, f.brand].filter(Boolean);
-  const range = p.from ? fmtRange(p.from, p.to) : (c.min ? `all data, ${fmtRange(c.min, c.max)}` : 'all data');
-  $('heroLabel').textContent = `Net sales, ${range}${ctx.length ? ' (' + ctx.join(', ') + ')' : ''}`;
-  setHero(c.sales);
-  let d = '';
-  if (p.prevFrom && c.lines) {
-    if (pv && pv.sales) {
-      const pct = (c.sales - pv.sales) / Math.abs(pv.sales) * 100;
-      d = `<span class="chip">${pct >= 0 ? '▲' : '▼'} ${Math.abs(pct).toFixed(1)}%</span>vs ${money(pv.sales)} in ${fmtRange(p.prevFrom, p.prevTo)}`;
+/* ---------- month-wise table ---------- */
+const PV_DIMS = [['salesman', 'Salesperson'], ['category', 'Category'], ['brand', 'Brand'], ['store', 'Store'], ['item', 'Item'], ['customer', 'Customer']];
+
+function buildPivotOptions() {
+  const dims = PV_DIMS.filter(([k]) => k === 'store' ? S.has.store >= 2 : S.has[k]);
+  const rowSel = $('pvRows');
+  rowSel.innerHTML = dims.map(([k, l]) => `<option value="${k}">${l}</option>`).join('') + '<option value="">Total only</option>';
+  const allowed = [...dims.map(d => d[0]), ''];
+  rowSel.value = S.pvRowsChosen != null && allowed.includes(S.pvRowsChosen) ? S.pvRowsChosen : (dims[0] ? dims[0][0] : '');
+
+  const metSel = $('pvMetric'), curMetric = metSel.value || 'sales';
+  const metrics = [['sales', 'Net sales'], ['qty', 'Quantity', S.has.qty], ['bills', S.has.billNo ? 'Bills' : 'Sale lines'], ['discount', 'Discount', S.has.discount]]
+    .filter(m => m[2] !== false);
+  metSel.innerHTML = metrics.map(([k, l]) => `<option value="${k}">${l}</option>`).join('');
+  metSel.value = metrics.some(m => m[0] === curMetric) ? curMetric : 'sales';
+}
+
+function renderMonthChips(months) {
+  const el = $('monthChips');
+  const key = months.join(',') + '|' + [...S.hiddenMonths].sort().join(',');
+  if (el.dataset.key === key) return;
+  el.dataset.key = key;
+  el.innerHTML = months.map(m => `<label class="mchip"><input type="checkbox" data-month="${m}"${S.hiddenMonths.has(m) ? '' : ' checked'}><span>${monthLabel(m)}</span></label>`).join('');
+  $('btnShowAllMonths').hidden = !months.some(m => S.hiddenMonths.has(m));
+}
+
+function renderPivot(rows) {
+  const dim = $('pvRows').value, metric = $('pvMetric').value || 'sales';
+  const idx = dim ? IX[dim] : -1;
+  const dimLabel = dim ? PV_DIMS.find(d => d[0] === dim)[1] : 'Sales';
+
+  const monthSet = new Set(), groups = new Map();
+  for (const r of rows) {
+    const m = r[0].slice(0, 7);
+    monthSet.add(m);
+    const name = idx < 0 ? 'All sales' : (r[idx] || '(blank)');
+    let g = groups.get(name);
+    if (!g) { g = { name, m: new Map() }; groups.set(name, g); }
+    const cell = g.m.get(m);
+    if (metric === 'bills') {
+      const set = cell || new Set();
+      if (!cell) g.m.set(m, set);
+      set.add(S.has.billNo && r[IX.billNo] ? r[IX.store] + '|' + r[IX.billNo] : r);
     } else {
-      d = `No uploaded sales for ${fmtRange(p.prevFrom, p.prevTo)} to compare with`;
+      const v = metric === 'sales' ? r[IX.amount] : metric === 'qty' ? r[IX.qty] : Math.abs(r[IX.discount]);
+      g.m.set(m, (cell || 0) + v);
     }
   }
-  $('heroDelta').innerHTML = d;
-}
-function setHero(v) {
-  const el = $('heroValue');
-  if (S.heroAnimated || reduceMotion || !v) { el.textContent = money(v); return; }
-  S.heroAnimated = true;
-  const t0 = performance.now(), dur = 900;
-  const step = t => {
-    const k = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - k, 3);
-    el.textContent = money(v * e);
-    if (k < 1) requestAnimationFrame(step); else el.textContent = money(v);
+
+  const months = [...monthSet].sort();
+  renderMonthChips(months);
+  const visible = months.filter(m => !S.hiddenMonths.has(m));
+  if (!visible.length) {
+    S.pvLast = null;
+    $('pivot').innerHTML = '<p class="note pv-empty">All months are hidden. Tick a month above to show it.</p>';
+    $('pvNote').textContent = '';
+    return;
+  }
+
+  const q = $('pvSearch').value.trim().toLowerCase();
+  const colTot = {}; visible.forEach(m => { colTot[m] = 0; });
+  let grand = 0;
+  const list = [];
+  for (const g of groups.values()) {
+    if (q && !g.name.toLowerCase().includes(q)) continue;
+    const vals = {}; let t = 0;
+    for (const m of visible) {
+      const c = g.m.get(m);
+      const v = c == null ? 0 : (c instanceof Set ? c.size : c);
+      vals[m] = v; t += v; colTot[m] += v;
+    }
+    grand += t;
+    list.push({ name: g.name, vals, total: t });
+  }
+
+  if (S.pvSort.col !== 'name' && S.pvSort.col !== 'total' && !visible.includes(S.pvSort.col)) S.pvSort = { col: 'total', dir: -1 };
+  const { col, dir } = S.pvSort;
+  const val = r => col === 'total' ? r.total : (r.vals[col] || 0);
+  list.sort((a, b) => col === 'name' ? dir * a.name.localeCompare(b.name) : dir * (val(a) - val(b)) || a.name.localeCompare(b.name));
+  S.pvLast = { dimLabel, metric, visible, list, colTot, grand };
+
+  const isMoney = metric === 'sales' || metric === 'discount';
+  const fmt = v => v ? (isMoney ? money(v) : num(v)) : '<span class="flat">–</span>';
+  const th = (c, label) => {
+    const on = S.pvSort.col === c;
+    return `<th aria-sort="${on ? (S.pvSort.dir > 0 ? 'ascending' : 'descending') : 'none'}"><button type="button" class="sort" data-sort="${c}">${esc(label)}${on ? (S.pvSort.dir > 0 ? ' ▲' : ' ▼') : ''}</button></th>`;
   };
-  requestAnimationFrame(step);
+  const LIMIT = 500, shown = list.slice(0, LIMIT);
+  $('pivot').innerHTML = `<table class="pv">
+    <thead><tr>${th('name', dimLabel)}${visible.map(m => th(m, monthLabel(m))).join('')}${th('total', 'Total')}<th>Share</th></tr></thead>
+    <tbody>
+      <tr class="pv-total"><td>Total${q ? ' of search results' : ''}</td>${visible.map(m => `<td>${fmt(colTot[m])}</td>`).join('')}<td class="pv-sum">${fmt(grand)}</td><td>${grand ? '100%' : '–'}</td></tr>
+      ${shown.map(r => `<tr><td>${esc(r.name)}</td>${visible.map(m => `<td>${fmt(r.vals[m])}</td>`).join('')}<td class="pv-sum">${fmt(r.total)}</td><td>${grand ? (r.total / grand * 100).toFixed(1) + '%' : '–'}</td></tr>`).join('')}
+    </tbody></table>`;
+
+  const hiddenCount = months.length - visible.length;
+  const notes = [];
+  if (hiddenCount) notes.push(`${hiddenCount} ${hiddenCount === 1 ? 'month is' : 'months are'} hidden and not included in Total.`);
+  if (list.length > LIMIT) notes.push(`Showing the top ${LIMIT} of ${num(list.length)} rows. Search or download the table to see the rest.`);
+  if (q && !list.length) notes.push('No rows match that search.');
+  notes.push('Click a column heading to sort.');
+  $('pvNote').textContent = notes.join(' ');
+}
+
+function downloadPivot() {
+  const d = S.pvLast;
+  if (!d || !d.list.length) return toast('Nothing to download for these filters.');
+  const metricLabel = $('pvMetric').selectedOptions[0].textContent;
+  const out = [
+    [d.dimLabel, ...d.visible.map(monthLabel), 'Total'],
+    ['Total', ...d.visible.map(m => round2(d.colTot[m])), round2(d.grand)],
+    ...d.list.map(r => [r.name, ...d.visible.map(m => round2(r.vals[m] || 0)), round2(r.total)])
+  ];
+  downloadCsv(`month-wise_${metricLabel}_by_${d.dimLabel}.csv`.replace(/\s+/g, '-').toLowerCase(), out);
+  toast(`Downloaded ${num(d.list.length)} ${d.list.length === 1 ? 'row' : 'rows'}.`);
 }
 
 function renderKpis(c, pv) {
@@ -965,38 +1105,21 @@ function renderItems(rows) {
     <tbody>${list.map((g, i) => `<tr><td class="rank">${i + 1}</td><td class="name">${esc(g.name)}</td>${showCat ? `<td class="l">${esc(g.cat || '')}</td>` : ''}${H.qty ? `<td>${num(g.qty)}</td>` : ''}<td>${money(g.sales)}</td>${shareCell(g.sales, total, max)}</tr>`).join('')}</tbody></table>
     ${moreButton(id, groups.length, 100)}`;
 }
-function renderMonths(rows) {
-  const H = S.has, m = new Map();
-  for (const r of rows) {
-    const k = r[0].slice(0, 7);
-    let g = m.get(k);
-    if (!g) { g = { sales: 0, qty: 0, disc: 0, lines: 0, bills: new Set() }; m.set(k, g); }
-    g.sales += r[IX.amount]; g.qty += r[IX.qty]; g.disc += Math.abs(r[IX.discount]); g.lines++;
-    if (r[IX.billNo]) g.bills.add(r[IX.store] + '|' + r[IX.billNo]);
-  }
-  const keys = [...m.keys()].sort().reverse().slice(0, 36);
-  const body = keys.map(k => {
-    const g = m.get(k), b = H.billNo ? g.bills.size : g.lines;
-    const prevKey = addMonths(k + '-01', -1).slice(0, 7), pg = m.get(prevKey);
-    const growth = pg && pg.sales ? deltaHtml(g.sales, pg.sales) : '<span class="flat">–</span>';
-    const disc = (g.sales + g.disc) > 0 ? g.disc / (g.sales + g.disc) * 100 : 0;
-    return `<tr><td class="l">${monthLabel(k)}</td><td>${money(g.sales)}</td><td>${growth}</td><td>${num(b)}</td>${H.billNo ? `<td>${money(b ? g.sales / b : 0)}</td>` : ''}${H.qty ? `<td>${num(g.qty)}</td>` : ''}${H.discount ? `<td>${disc.toFixed(1)}%</td>` : ''}</tr>`;
-  }).join('');
-  $('tMonth').innerHTML = `<table><thead><tr><th class="l">Month</th><th>Net sales</th><th>vs previous month</th><th>${H.billNo ? 'Bills' : 'Lines'}</th>${H.billNo ? '<th>Avg bill</th>' : ''}${H.qty ? '<th>Qty</th>' : ''}${H.discount ? '<th>Discount</th>' : ''}</tr></thead><tbody>${body}</tbody></table>`;
-}
-
 /* ---------- export ---------- */
+function downloadCsv(filename, rows) {
+  const q = v => { const t = String(v ?? ''); return /[",\n\r]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; };
+  const csv = '\ufeff' + rows.map(r => r.map(q).join(',')).join('\r\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+  a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 3000);
+}
 function exportCsv() {
   const f = readFilters(), p = periodFor(f);
   const rows = filterRows(f, p.from, p.to);
   if (!rows.length) return toast('Nothing to export for these filters.');
-  const q = v => { const s = String(v ?? ''); return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
-  const csv = '\ufeff' + [FIELDS.map(x => x.label), ...rows].map(r => r.map(q).join(',')).join('\r\n');
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
-  a.download = `sales_${p.from || 'all'}${p.to ? '_to_' + p.to : ''}.csv`;
-  document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(a.href), 3000);
+  downloadCsv(`sales_${p.from || 'all'}${p.to ? '_to_' + p.to : ''}.csv`, [FIELDS.map(x => x.label), ...rows]);
   toast(`Exported ${num(rows.length)} rows.`);
 }
 
@@ -1379,7 +1502,7 @@ function init() {
   ['fFrom', 'fTo'].forEach(id => $(id).addEventListener('change', () => { $('fPreset').value = 'custom'; render(); }));
   ['fStore', 'fSalesman', 'fCategory', 'fBrand', 'fSource'].forEach(id => $(id).addEventListener('change', () => { S.showAll = {}; render(); }));
   const reset = () => {
-    $('fPreset').value = 'latest';
+    $('fPreset').value = 'all';
     ['fStore', 'fSalesman', 'fCategory', 'fBrand', 'fSource'].forEach(id => { $(id).value = ''; });
     S.showAll = {}; render();
   };
@@ -1397,6 +1520,37 @@ function init() {
     if (!b) return;
     S.showAll[b.dataset.more] = !S.showAll[b.dataset.more]; render();
   });
+
+  const tabs = [...document.querySelectorAll('[data-tab]')];
+  const openTab = (t, focus) => { S.tab = t; render(); if (focus) $(t === 'table' ? 'tabBtnTable' : 'tabBtnCharts').focus(); };
+  tabs.forEach(b => {
+    b.addEventListener('click', () => openTab(b.dataset.tab));
+    b.addEventListener('keydown', e => {
+      if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+      e.preventDefault();
+      const i = tabs.indexOf(b), next = tabs[(i + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length];
+      openTab(next.dataset.tab, true);
+    });
+  });
+  $('pvRows').addEventListener('change', e => { S.pvRowsChosen = e.target.value; S.pvSort = { col: 'total', dir: -1 }; render(); });
+  $('pvMetric').addEventListener('change', render);
+  let searchTimer;
+  $('pvSearch').addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(render, 200); });
+  $('monthChips').addEventListener('change', e => {
+    const c = e.target.closest('[data-month]');
+    if (!c) return;
+    if (c.checked) S.hiddenMonths.delete(c.dataset.month); else S.hiddenMonths.add(c.dataset.month);
+    render();
+  });
+  $('btnShowAllMonths').addEventListener('click', () => { S.hiddenMonths.clear(); render(); });
+  $('pivot').addEventListener('click', e => {
+    const b = e.target.closest('[data-sort]');
+    if (!b) return;
+    const c = b.dataset.sort;
+    S.pvSort = S.pvSort.col === c ? { col: c, dir: -S.pvSort.dir } : { col: c, dir: c === 'name' ? 1 : -1 };
+    render();
+  });
+  $('btnPvDownload').addEventListener('click', downloadPivot);
 
   $('btnUnlock').addEventListener('click', unlock);
   $('adminKey').addEventListener('keydown', e => { if (e.key === 'Enter') unlock(); });
