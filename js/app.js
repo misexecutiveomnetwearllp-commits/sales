@@ -1,7 +1,7 @@
 import { DB, setApiUrl, getApiUrl, isConfigured } from "./api.js";
 import {
   readFileMatrix, fileToBase64, matrixFromBase64, detectHeaderRow, extractHeaders, extractDataRows, rowPreviewLabel,
-  guessMapping, buildSalesRecords, buildTargetRecords
+  guessMapping, refineMappingWithData, buildSalesRecords, buildTargetRecords
 } from "./parse.js";
 import {
   filterSales, filterTargets, aggregateByPerson, aggregateByPersonMonthly, aggregateByStore, totals,
@@ -581,7 +581,11 @@ function rebuildPendingHeaders(){
   const headers = extractHeaders(matrix, headerRowIndex);
   const dataRows = extractDataRows(matrix, headerRowIndex);
   const fields = type === "sales" ? SALES_FIELDS : TARGET_FIELDS;
-  const mapping = guessMapping(headers, fields.map(f => f.key));
+  const fieldKeys = fields.map(f => f.key);
+  let mapping = guessMapping(headers, fieldKeys);
+  // Second pass: fill anything the headings alone couldn't settle, using
+  // what the data in each column actually looks like.
+  mapping = refineMappingWithData(mapping, headers, dataRows, fieldKeys);
   state.pendingMap.headers = headers;
   state.pendingMap.dataRows = dataRows;
   state.pendingMap.fields = fields;
@@ -714,6 +718,11 @@ async function confirmMapping(){
         closeMapModal();
         return;
       }
+      if (file.size > 20 * 1024 * 1024){
+        toast("That file is over 20 MB — Apps Script will reject it. Split it into smaller exports (e.g. one per month).");
+        return;
+      }
+      toast("Uploading\u2026 large files can take a moment");
       const base64 = await fileToBase64(file);
       const fileId = await DB.uploadFile({
         name: file.name, base64, mimeType: file.type || "",

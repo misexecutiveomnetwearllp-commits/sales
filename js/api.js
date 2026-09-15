@@ -20,6 +20,33 @@ export function isConfigured(){
   return !!apiUrl();
 }
 
+/**
+ * Apps Script returns an HTML sign-in page (not JSON) when the deployment's
+ * "Who has access" isn't set to Anyone — which used to surface as a useless
+ * "Unexpected token <" error. This turns every failure into a sentence that
+ * says what to actually go and fix.
+ */
+async function readJson(res, what){
+  if (!res.ok){
+    throw new Error(`${what} failed (HTTP ${res.status}). If this is 401/403, redeploy with "Who has access: Anyone".`);
+  }
+  const text = await res.text();
+  const trimmed = text.trim();
+  if (trimmed.startsWith("<")){
+    throw new Error(
+      "The backend returned a Google sign-in page instead of data. Go to Deploy \u2192 Manage deployments \u2192 Edit (pencil), set \"Who has access\" to Anyone, and deploy a New version."
+    );
+  }
+  let data;
+  try {
+    data = JSON.parse(trimmed);
+  } catch (e){
+    throw new Error("The backend sent something that isn't JSON. Check the Web App URL ends in /exec and has no spaces.");
+  }
+  if (data.error) throw new Error(data.error);
+  return data;
+}
+
 function normalizeFileRow(f){
   let mapping = null;
   try { mapping = f.mapping ? JSON.parse(f.mapping) : null; } catch (e){ mapping = null; }
@@ -40,10 +67,8 @@ function normalizeTargetRow(r){
 async function fetchAll(){
   const url = apiUrl();
   if (!url) throw new Error("NOT_CONFIGURED");
-  const res = await fetch(`${url}?action=getAll`);
-  if (!res.ok) throw new Error("Request failed: " + res.status);
-  const data = await res.json();
-  if (data.error) throw new Error(data.error);
+  const res = await fetch(`${url}?action=getAll`, { redirect: "follow" });
+  const data = await readJson(res, "Loading data");
   cache = {
     files: (data.files || []).map(normalizeFileRow),
     targets: (data.targets || []).map(normalizeTargetRow),
@@ -61,10 +86,7 @@ async function post(action, payload){
     headers: { "Content-Type": "text/plain;charset=utf-8" },
     body: JSON.stringify({ action, payload })
   });
-  if (!res.ok) throw new Error("Request failed: " + res.status);
-  const data = await res.json();
-  if (data.error) throw new Error(data.error);
-  return data;
+  return readJson(res, "Saving");
 }
 
 async function ensureCache(){
@@ -82,11 +104,8 @@ export const DB = {
   async getFileContent(id){
     const url = apiUrl();
     if (!url) throw new Error("NOT_CONFIGURED");
-    const res = await fetch(`${url}?action=getFileContent&id=${encodeURIComponent(id)}`);
-    if (!res.ok) throw new Error("Request failed: " + res.status);
-    const data = await res.json();
-    if (data.error) throw new Error(data.error);
-    return data; // { name, base64 }
+    const res = await fetch(`${url}?action=getFileContent&id=${encodeURIComponent(id)}`, { redirect: "follow" });
+    return readJson(res, "Downloading file"); // { name, base64 }
   },
 
   async uploadFile(meta){
