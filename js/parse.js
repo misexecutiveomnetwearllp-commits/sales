@@ -146,7 +146,9 @@ const FIELD_RULES = {
     negative: ["code", "id", "address", "item", "product"]
   },
   salesperson: {
-    positive: [["salesperson", 18], ["sales person", 18], ["sales man", 17], ["salesman", 17],
+    positive: [["salesperson", 18], ["sales person", 18], ["sale person", 18],
+               ["sale person name", 18], ["sales person name", 18], ["salesperson name", 18],
+               ["seller", 14], ["sales man", 17], ["salesman", 17],
                ["sales executive", 17], ["sales rep", 16], ["sold by", 16], ["created by", 8],
                ["executive", 11], ["employee name", 16], ["staff name", 16], ["employee", 11],
                ["staff", 11], ["agent", 10], ["cashier", 10], ["counter", 7], ["emp name", 15]],

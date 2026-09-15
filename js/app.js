@@ -1,4 +1,4 @@
-import { DB, setApiUrl, getApiUrl, isConfigured } from "./api.js";
+import { DB, setApiUrl, getApiUrl, isConfigured, isBuiltIn } from "./api.js";
 import {
   readFileMatrix, fileToBase64, matrixFromBase64, detectHeaderRow, extractHeaders, extractDataRows, rowPreviewLabel,
   guessMapping, refineMappingWithData, buildSalesRecords, buildTargetRecords
@@ -98,6 +98,13 @@ async function reloadSalesFromFiles(){
 
 /* ============ Connection (Apps Script URL) ============ */
 function wireConnection(){
+  // When config.js has the URL baked in, there is nothing for the user to
+  // connect — hide the whole panel so the Data tab is just upload + history.
+  if (isBuiltIn()){
+    const panel = $("#apiUrlInput").closest(".panel");
+    if (panel) panel.classList.add("hidden");
+    return;
+  }
   $("#apiUrlInput").value = getApiUrl();
   $("#apiUrlSaveBtn").addEventListener("click", async () => {
     const url = $("#apiUrlInput").value.trim();
@@ -116,7 +123,7 @@ function wireConnection(){
 function renderConnectionStatus(){
   const configured = isConfigured();
   const el = $("#connectionStatus");
-  el.textContent = configured ? "Connected" : "Not connected";
+  el.textContent = configured ? (isBuiltIn() ? "Connected (built in)" : "Connected") : "Not connected";
   el.className = "tag " + (configured ? "tag-good" : "tag-bad");
 }
 

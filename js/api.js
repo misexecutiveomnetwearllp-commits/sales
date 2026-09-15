@@ -20,6 +20,12 @@ export function isConfigured(){
   return !!apiUrl();
 }
 
+// True when the URL is baked into config.js, so every device that opens
+// the site link is connected without anyone pasting anything.
+export function isBuiltIn(){
+  return !!APPS_SCRIPT_URL;
+}
+
 /**
  * Apps Script returns an HTML sign-in page (not JSON) when the deployment's
  * "Who has access" isn't set to Anyone — which used to surface as a useless
