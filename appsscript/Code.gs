@@ -79,7 +79,7 @@ function findRowIndexByValue_(sheet, colIndex, value){
 /* ============ Public API ============ */
 
 function doGet(e){
-  const action = (e.parameter && e.parameter.action) || "getAll";
+  const action = (e && e.parameter && e.parameter.action) || "getAll";
   let result;
   try {
     if (action === "getAll"){

@@ -64,9 +64,28 @@ does **not** update a live deployment.
      deployments → Edit (pencil icon)**, change it, and deploy a new
      version.
    - If you see `{"error":"...Drive..."}` or a permissions-related error —
-     the Drive authorization from step 7 wasn't completed. Go to
-     **Deploy → Manage deployments → Edit**, deploy a **New version**, and
-     make sure you approve both permissions when prompted this time.
+     the Drive authorization from step 7 wasn't completed, **or** the
+     authorization was granted with a narrower Drive scope than the app
+     needs (a common one: `Exception: Specified permissions are not
+     sufficient to call DriveApp.createFolder. Required permissions:
+     https://www.googleapis.com/auth/drive`). To fix:
+     1. Make sure `appsscript.json` (Project Settings → "Show
+        'appsscript.json' manifest file in editor") includes an
+        `oauthScopes` array listing both
+        `https://www.googleapis.com/auth/spreadsheets` and
+        `https://www.googleapis.com/auth/drive` — this repo's copy of the
+        file already has it; copy it in if yours doesn't.
+     2. Revoke the script's previous authorization so it re-prompts with
+        the full scope: open
+        [myaccount.google.com/permissions](https://myaccount.google.com/permissions),
+        find the Apps Script project (or the Sheet), and remove its
+        access — or simply run any function once from the Apps Script
+        editor (e.g. select `clearAll_` — don't actually click it if you
+        have data, just pick any function and hit Run once, cancel if it
+        errors) and approve the fuller permission list it now asks for.
+     3. Go to **Deploy → Manage deployments → Edit (pencil icon)** →
+        **New version** → **Deploy** so the live URL picks up the new
+        manifest.
    - If you see any other error message in the JSON, it'll say exactly
      what broke — the site now surfaces that same message in its toast
      notification too.
