@@ -1,0 +1,1430 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sales Performance</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{
+  --ink:#1B2430; --muted:#5B6675; --paper:#F3F4F1; --panel:#FFFFFF; --rule:#D6DEE6; --rule-soft:#E8EDF1;
+  --bahi:#A4161A; --bahi-deep:#7C0F13; --ledger:#1F7A4D; --loss:#B42318; --marigold:#E0A21B; --slate:#3D5A80;
+  --display:'Barlow Condensed','Arial Narrow',sans-serif; --body:'Barlow',system-ui,-apple-system,'Segoe UI',sans-serif;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.5 var(--body);font-variant-numeric:tabular-nums}
+button,input,select{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--marigold);outline-offset:2px}
+[hidden]{display:none !important}
+code{font-size:.92em;background:rgba(0,0,0,.06);padding:1px 4px;border-radius:3px}
+.wrap{max-width:1320px;margin:0 auto;padding:0 24px 0 60px;position:relative}
+
+/* Header: red bahi-khata cover with ledger ruling and margin lines */
+.band{background-color:var(--bahi);color:#fff;
+  background-image:repeating-linear-gradient(180deg,transparent 0 31px,rgba(0,0,0,.13) 31px 32px)}
+.band .wrap{padding-top:16px;padding-bottom:30px}
+.band .wrap::before{content:"";position:absolute;top:0;bottom:0;left:28px;width:6px;
+  border-left:1px solid rgba(255,255,255,.3);border-right:1px solid rgba(255,255,255,.3)}
+.band-top{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.brand-name{font-family:var(--display);font-weight:600;font-size:23px}
+.sync{font-size:14px;color:rgba(255,255,255,.82);margin-left:14px}
+.band-actions{display:flex;gap:8px}
+.hero{margin-top:26px}
+.hero-label{font-size:17px;color:rgba(255,255,255,.9)}
+.hero-figure{font-family:var(--display);font-weight:700;font-size:clamp(54px,10vw,116px);line-height:.95;margin:6px 0 10px;overflow-wrap:anywhere}
+.hero-delta{font-size:16px;min-height:24px}
+.chip{display:inline-block;background:rgba(0,0,0,.25);border-radius:3px;padding:1px 8px;margin-right:8px;font-weight:600}
+
+.btn{border:1px solid transparent;border-radius:4px;padding:7px 14px;cursor:pointer;font-weight:500;line-height:1.3;background:none}
+.btn-onred{border-color:rgba(255,255,255,.55);color:#fff}
+.btn-onred:hover{background:rgba(255,255,255,.12)}
+.btn-white{background:#fff;color:var(--bahi-deep)}
+.btn-white:hover{background:#FBEDEA}
+.btn-primary{background:var(--bahi);color:#fff}
+.btn-primary:hover{background:var(--bahi-deep)}
+.btn-primary:disabled{opacity:.45;cursor:not-allowed}
+.btn-plain{border-color:var(--rule);background:#fff}
+.btn-plain:hover{border-color:var(--muted)}
+.btn-danger{border-color:#E7B4AE;color:var(--loss);background:#fff;align-self:flex-start}
+.btn-danger:hover{background:#FDF0EE}
+
+/* Filters */
+.filters{position:sticky;top:0;z-index:20;background:var(--panel);border-bottom:1px solid var(--rule)}
+.filter-row{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;padding-top:10px;padding-bottom:10px}
+.fld{display:flex;flex-direction:column;gap:2px;min-width:0}
+.fld label{font-size:13px;color:var(--muted)}
+.fld select,.fld input,.input{border:1px solid var(--rule);border-radius:3px;padding:6px 8px;background:#fff;height:37px}
+.filters .fld select,.filters .fld input{width:150px}
+.fld-actions{display:flex;gap:8px;margin-left:auto}
+.fld-actions .btn{height:37px}
+
+/* Dashboard */
+main.wrap{padding-bottom:56px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));background:var(--panel);border:1px solid var(--rule);border-radius:6px;margin:20px 0 16px;overflow:hidden}
+.kpi{padding:14px 18px;box-shadow:-1px 0 0 var(--rule-soft)}
+.kpi-label{font-size:14px;color:var(--muted)}
+.kpi-value{font-family:var(--display);font-weight:600;font-size:34px;line-height:1.1}
+.kpi-delta{font-size:13.5px;min-height:20px}
+.up{color:var(--ledger)} .down{color:var(--loss)} .flat{color:var(--muted)}
+
+.grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px}
+.panel{background:var(--panel);border:1px solid var(--rule);border-radius:6px;padding:16px 18px}
+.s4{grid-column:span 4}.s5{grid-column:span 5}.s6{grid-column:span 6}.s7{grid-column:span 7}.s8{grid-column:span 8}.s12{grid-column:span 12}
+.panel-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:10px;flex-wrap:wrap}
+.panel h2{font-family:var(--display);font-weight:600;font-size:22px;margin:0;line-height:1.2}
+.note{font-size:13.5px;color:var(--muted);margin:2px 0 0}
+.chart-box{position:relative;height:300px}
+.seg{display:inline-flex;border:1px solid var(--rule);border-radius:4px;overflow:hidden}
+.seg button{border:0;background:#fff;padding:4px 11px;font-size:14px;cursor:pointer}
+.seg button+button{border-left:1px solid var(--rule)}
+.seg button[aria-pressed="true"]{background:var(--ink);color:#fff}
+
+.tbl-wrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:14.5px}
+th{font-weight:500;color:var(--muted);text-align:right;padding:6px 8px;border-bottom:1px solid var(--rule);white-space:nowrap}
+td{padding:7px 8px;border-bottom:1px solid var(--rule-soft);text-align:right;white-space:nowrap}
+th.l,td.l{text-align:left}
+td.name{white-space:normal;min-width:150px;font-weight:500;text-align:left}
+td.rank{color:var(--muted);width:30px;text-align:left}
+td.share{min-width:130px;text-align:left}
+.bar{height:7px;background:var(--rule-soft);border-radius:2px;position:relative;margin-top:3px}
+.bar i{position:absolute;left:0;top:0;bottom:0;background:var(--bahi);border-radius:2px}
+.share span{font-size:13px;color:var(--muted)}
+.more{margin-top:10px}
+
+.notice{background:#FFF6DD;border-bottom:1px solid #EBD58F;font-size:14.5px}
+.notice .wrap{padding-top:8px;padding-bottom:8px}
+.empty{background:var(--panel);border:1.5px dashed var(--rule);border-radius:6px;padding:44px 24px;text-align:center;margin:20px 0}
+.empty h2{font-family:var(--display);font-weight:600;font-size:30px;margin:0 0 6px}
+.empty p{max-width:520px;margin:0 auto 16px;color:var(--muted)}
+.errbar{background:#FDECEA;color:var(--loss);border:1px solid #F1B8B1;border-radius:6px;padding:12px 14px;margin:20px 0 0}
+
+/* Drawer */
+.scrim{position:fixed;inset:0;background:rgba(27,36,48,.42);z-index:40;opacity:0;pointer-events:none;transition:opacity .2s}
+.scrim.open{opacity:1;pointer-events:auto}
+.drawer{position:fixed;top:0;right:0;bottom:0;width:min(580px,100%);background:var(--paper);z-index:50;transform:translateX(100%);transition:transform .25s ease;display:flex;flex-direction:column;border-left:1px solid var(--rule);visibility:hidden}
+.drawer.open{transform:none;visibility:visible}
+.drawer-head{background:var(--ink);color:#fff;padding:12px 18px;display:flex;justify-content:space-between;align-items:center}
+.drawer-head h2{font-family:var(--display);font-weight:600;font-size:23px;margin:0}
+.drawer-body{overflow-y:auto;padding:16px 18px 48px}
+.box{background:#fff;border:1px solid var(--rule);border-radius:6px;padding:14px 16px;margin-bottom:14px}
+.box h3{font-family:var(--display);font-weight:600;font-size:20px;margin:0 0 6px}
+.box h4{font-size:15px;margin:16px 0 4px}
+.box-head{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px}
+.row .input{flex:1;min-width:180px}
+.drawer .fld{margin:10px 0}
+.drawer .fld select{width:100%}
+.dropzone{display:block;border:1.5px dashed var(--rule);border-radius:6px;padding:20px;text-align:center;cursor:pointer;background:var(--paper);margin-top:10px}
+.dropzone:hover,.dropzone.drag{border-color:var(--bahi);background:#FBF1EF}
+.map-grid{display:grid;grid-template-columns:minmax(120px,1fr) 1.6fr;gap:6px 10px;align-items:center;font-size:14.5px;margin-top:8px}
+.map-grid select{width:100%;height:35px;border:1px solid var(--rule);border-radius:3px;background:#fff;padding:4px 6px}
+.map-grid select.unset{color:var(--muted)}
+.req{color:var(--bahi)}
+.msg{font-size:14px;margin:8px 0 0}
+.msg.err{color:var(--loss)} .msg.ok{color:var(--ledger)}
+.warn{background:#FFF6DD;border:1px solid #EBD58F;border-radius:4px;padding:8px 10px;font-size:14px;margin-top:8px}
+.summary{margin-top:14px;padding-top:12px;border-top:1px solid var(--rule-soft)}
+.summary p{margin:0 0 4px}
+.preview-tbl{margin-top:10px}
+.preview-tbl td,.preview-tbl th{font-size:13px;padding:4px 6px}
+#btnUpload{margin-top:14px}
+.progress{height:8px;background:var(--rule-soft);border-radius:4px;overflow:hidden;margin-top:10px}
+.progress i{display:block;height:100%;width:0;background:var(--ledger);transition:width .2s}
+.file-item{display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-top:1px solid var(--rule-soft)}
+.file-item:first-of-type{border-top:0}
+.file-name{font-weight:600;overflow-wrap:anywhere}
+.file-meta{font-size:13.5px;color:var(--muted)}
+
+dialog{border:1px solid var(--rule);border-radius:6px;padding:20px;max-width:380px;width:calc(100% - 32px);color:var(--ink)}
+dialog::backdrop{background:rgba(27,36,48,.5)}
+dialog h3{font-family:var(--display);font-weight:600;font-size:22px;margin:0 0 4px}
+dialog .input{width:100%;margin-top:10px}
+.dlg-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
+.toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 16px;border-radius:4px;z-index:60;font-size:15px;max-width:calc(100% - 32px)}
+
+@media (max-width:1000px){ .s4,.s5,.s6,.s7,.s8{grid-column:span 12} }
+@media (max-width:720px){
+  .wrap{padding-left:16px;padding-right:16px}
+  .band .wrap::before{display:none}
+  .sync{display:block;margin-left:0}
+  .filters{position:static}
+  .fld{flex:1 1 44%}
+  .filters .fld select,.filters .fld input{width:100%}
+  .fld-actions{margin-left:0;flex:1 1 100%}
+  .fld-actions .btn{flex:1}
+  .kpi-value{font-size:29px}
+  .chart-box{height:260px}
+}
+@media (prefers-reduced-motion:reduce){ .drawer,.scrim,.progress i{transition:none} }
+</style>
+</head>
+<body>
+
+<header class="band">
+  <div class="wrap">
+    <div class="band-top">
+      <div><span class="brand-name" id="brandName">Sales Performance</span><span class="sync" id="sync" aria-live="polite">Loading…</span></div>
+      <div class="band-actions">
+        <button class="btn btn-onred" id="btnRefresh" type="button">Refresh</button>
+        <button class="btn btn-white" id="btnManage" type="button">Manage data</button>
+      </div>
+    </div>
+    <div class="hero">
+      <div class="hero-label" id="heroLabel">Net sales</div>
+      <div class="hero-figure" id="heroValue">₹0</div>
+      <div class="hero-delta" id="heroDelta"></div>
+    </div>
+  </div>
+</header>
+
+<div class="notice" id="demoNotice" hidden><div class="wrap">Sample data is showing because no Google Sheet is connected yet. Paste your Apps Script web app URL into <code>CONFIG.API_URL</code> in index.html to use your own data.</div></div>
+
+<div class="filters">
+  <div class="wrap filter-row">
+    <div class="fld"><label for="fPreset">Period</label>
+      <select id="fPreset">
+        <option value="latest">Latest month in data</option>
+        <option value="thisMonth">This month</option>
+        <option value="lastMonth">Last month</option>
+        <option value="last7">Last 7 days</option>
+        <option value="last30">Last 30 days</option>
+        <option value="thisFY">This financial year</option>
+        <option value="lastFY">Last financial year</option>
+        <option value="all">All data</option>
+        <option value="custom">Custom dates</option>
+      </select>
+    </div>
+    <div class="fld"><label for="fFrom">From</label><input type="date" id="fFrom"></div>
+    <div class="fld"><label for="fTo">To</label><input type="date" id="fTo"></div>
+    <div class="fld" data-filter="store"><label for="fStore">Store</label><select id="fStore"></select></div>
+    <div class="fld" data-filter="salesman"><label for="fSalesman">Salesperson</label><select id="fSalesman"></select></div>
+    <div class="fld" data-filter="category"><label for="fCategory">Category</label><select id="fCategory"></select></div>
+    <div class="fld" data-filter="brand"><label for="fBrand">Brand</label><select id="fBrand"></select></div>
+    <div class="fld" id="sourceFld"><label for="fSource">File</label><select id="fSource"></select></div>
+    <div class="fld-actions">
+      <button class="btn btn-plain" id="btnReset" type="button">Reset</button>
+      <button class="btn btn-plain" id="btnExport" type="button">Export CSV</button>
+    </div>
+  </div>
+</div>
+
+<main class="wrap">
+  <div class="errbar" id="errbar" role="alert" hidden></div>
+
+  <section class="empty" id="emptyNoData" hidden>
+    <h2>No sales data yet</h2>
+    <p>Export a sales report from Wizapp as Excel or CSV, then upload it here. Each file stays in your Google Sheet until you delete it.</p>
+    <button class="btn btn-primary" id="btnEmptyUpload" type="button">Upload sales file</button>
+  </section>
+
+  <section class="empty" id="emptyFilter" hidden>
+    <h2>No sales for these filters</h2>
+    <p>Pick a wider period or reset the filters.</p>
+    <button class="btn btn-plain" id="btnEmptyReset" type="button">Reset filters</button>
+  </section>
+
+  <div id="dash" hidden>
+    <section class="kpis" id="kpis" aria-label="Key figures"></section>
+
+    <section class="grid">
+      <article class="panel s8">
+        <div class="panel-head">
+          <div><h2>Sales trend</h2><p class="note" id="trendNote"></p></div>
+          <div class="seg" id="granSeg" role="group" aria-label="Group trend by">
+            <button type="button" data-gran="auto" aria-pressed="true">Auto</button>
+            <button type="button" data-gran="day" aria-pressed="false">Day</button>
+            <button type="button" data-gran="week" aria-pressed="false">Week</button>
+            <button type="button" data-gran="month" aria-pressed="false">Month</button>
+          </div>
+        </div>
+        <div class="chart-box"><canvas id="cTrend" aria-label="Sales trend chart" role="img"></canvas></div>
+      </article>
+
+      <article class="panel s4" data-need="category">
+        <div class="panel-head"><div><h2>Category mix</h2><p class="note">Share of net sales</p></div></div>
+        <div class="chart-box"><canvas id="cCat" aria-label="Category share chart" role="img"></canvas></div>
+      </article>
+
+      <article class="panel s12" data-need="salesman">
+        <div class="panel-head"><div><h2>Salesperson leaderboard</h2><p class="note">Ranked by net sales. The bar compares each person with the top seller.</p></div></div>
+        <div class="tbl-wrap" id="tSalesman"></div>
+      </article>
+
+      <article class="panel s7" data-need="store">
+        <div class="panel-head"><div><h2>Store performance</h2><p class="note">Ranked by net sales</p></div></div>
+        <div class="tbl-wrap" id="tStore"></div>
+      </article>
+
+      <article class="panel s5">
+        <div class="panel-head"><div><h2>Day of week</h2><p class="note">Average net sales per trading day. Darker bar is the best day.</p></div></div>
+        <div class="chart-box"><canvas id="cWeek" aria-label="Average sales by day of week" role="img"></canvas></div>
+      </article>
+
+      <article class="panel s7" data-need="item">
+        <div class="panel-head"><div><h2>Top selling items</h2><p class="note">Ranked by net sales</p></div></div>
+        <div class="tbl-wrap" id="tItem"></div>
+      </article>
+
+      <article class="panel s5" data-need="brand">
+        <div class="panel-head"><div><h2>Top brands</h2><p class="note">Net sales, top 10</p></div></div>
+        <div class="chart-box"><canvas id="cBrand" aria-label="Top brands chart" role="img"></canvas></div>
+      </article>
+
+      <article class="panel s12">
+        <div class="panel-head"><div><h2>Month-wise summary</h2><p class="note">All months in the data, with store, salesperson, category, brand and file filters applied</p></div></div>
+        <div class="tbl-wrap" id="tMonth"></div>
+      </article>
+    </section>
+  </div>
+</main>
+
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer" aria-label="Manage data" aria-hidden="true">
+  <div class="drawer-head">
+    <h2>Manage data</h2>
+    <button class="btn btn-onred" id="btnClose" type="button">Close</button>
+  </div>
+  <div class="drawer-body">
+    <div class="box" id="lockBox">
+      <h3>Unlock uploads</h3>
+      <p class="note">Anyone with the link can view the dashboard. Uploading and deleting files needs the admin password you set in Apps Script.</p>
+      <div class="row">
+        <input class="input" type="password" id="adminKey" placeholder="Admin password" autocomplete="current-password" aria-label="Admin password">
+        <button class="btn btn-primary" id="btnUnlock" type="button">Unlock</button>
+      </div>
+      <p class="msg" id="lockMsg"></p>
+    </div>
+
+    <div class="box" id="uploadBox" hidden>
+      <div class="box-head"><h3>Upload a Wizapp export</h3><button class="btn btn-plain" id="btnLock" type="button">Lock</button></div>
+      <label class="dropzone" id="dropzone" tabindex="0">
+        <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" hidden>
+        <strong>Choose file</strong> or drop it here<br><span class="note">Excel (.xlsx, .xls) or CSV</span>
+      </label>
+      <p class="msg" id="fileMsg"></p>
+
+      <div id="wizard" hidden>
+        <div class="fld" id="sheetFld"><label for="sheetSel">Sheet</label><select id="sheetSel"></select></div>
+        <div class="fld"><label for="headerSel">Row with column names</label><select id="headerSel"></select></div>
+        <h4>Match columns</h4>
+        <p class="note">Columns were matched automatically. Check them, especially bill date and net sales amount.</p>
+        <div class="map-grid" id="mapGrid"></div>
+        <div class="fld"><label for="dateOrder">Dates in this file are written</label>
+          <select id="dateOrder">
+            <option value="dmy">Day first, like 15/09/2026</option>
+            <option value="mdy">Month first, like 09/15/2026</option>
+          </select>
+        </div>
+        <div id="preview"></div>
+        <button class="btn btn-primary" id="btnUpload" type="button" disabled>Upload</button>
+        <div class="progress" id="progress" hidden><i></i></div>
+        <p class="msg" id="uploadMsg" aria-live="polite"></p>
+      </div>
+    </div>
+
+    <div class="box">
+      <h3>Uploaded files</h3>
+      <div id="fileList"><p class="note">Loading…</p></div>
+    </div>
+  </div>
+</aside>
+
+<dialog id="keyDlg">
+  <h3 id="kdTitle">Enter PIN</h3>
+  <p class="note" id="kdMsg"></p>
+  <input class="input" type="password" id="kdInput" aria-label="PIN">
+  <p class="msg err" id="kdErr"></p>
+  <div class="dlg-actions">
+    <button class="btn btn-plain" id="kdCancel" type="button">Cancel</button>
+    <button class="btn btn-primary" id="kdOk" type="button">Continue</button>
+  </div>
+</dialog>
+
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script>
+'use strict';
+/* =====================================================================
+   SETTINGS — sirf yeh 2 lines change karni hain
+   ===================================================================== */
+const CONFIG = {
+  API_URL: '',                 // Apps Script Web App URL paste karein (…/exec se khatam hota hai)
+  TITLE: 'Sales Performance',  // Apni company ka naam likh sakte hain
+  CHUNK_SIZE: 2500             // ek baar me kitni rows bhejni hain
+};
+
+/* ---------- Fields stored in the Google Sheet (order matters, same as Code.gs) ---------- */
+const FIELDS = [
+  { key:'date', label:'Bill date', required:true,
+    syn:['billdate','date','invoicedate','saledate','salesdate','memodate','cmdate','docdate','transactiondate','trandate','voucherdate','vdate'],
+    not:['due','mfg','exp','birth','dob','anniv'] },
+  { key:'billNo', label:'Bill no.',
+    syn:['billno','billnumber','invoiceno','invoicenumber','memono','cmno','docno','voucherno','receiptno','billid','bill','invoice'],
+    not:['date','amt','amount','type','time','qty','value','total','disc'] },
+  { key:'store', label:'Store / location',
+    syn:['location','locationname','locname','store','storename','branch','branchname','showroom','outlet','shop','shopname','site'],
+    not:['code','type','address'] },
+  { key:'salesman', label:'Salesperson',
+    syn:['salesman','salesmanname','salesperson','salespersonname','staffname','staff','employeename','employee','empname','executive','smname','sm'],
+    not:['code','commission','incentive'] },
+  { key:'customer', label:'Customer',
+    syn:['customername','customer','custname','partyname','party','clientname','client','customermobile','mobileno','mobile','phone','contactno'],
+    not:['code','type','group','address','city'] },
+  { key:'item', label:'Item / article',
+    syn:['articlename','itemname','productname','article','item','product','description','style','design','articleno','itemcode','productcode','sku','barcode'],
+    not:['group','category','qty','rate','amount','tax','disc','type'] },
+  { key:'category', label:'Category / section',
+    syn:['section','sectionname','category','categoryname','subsection','subsectionname','department','dept','itemgroup','productgroup','group','division','subcategory'],
+    not:['code'] },
+  { key:'brand', label:'Brand',
+    syn:['brand','brandname','manufacturer'],
+    not:['code'] },
+  { key:'qty', label:'Quantity',
+    syn:['qty','quantity','soldqty','saleqty','salesqty','netqty','billqty','pcs','units','nos'],
+    not:['free','return','rate','amount','value'] },
+  { key:'discount', label:'Discount amount',
+    syn:['discountamount','discamt','discamount','discount','totaldiscount','discountvalue','disc'],
+    not:['per','pct','percent','rate'] },
+  { key:'amount', label:'Net sales amount', required:true,
+    syn:['netamount','netamt','netsale','netsales','netvalue','nettotal','netsaleamount','netsalesvalue','nrv','billamount','saleamount','salesamount','amount','totalamount','total','value','taxableamount','taxablevalue','grossamount','amt'],
+    not:['mrp','disc','tax','gst','rate','cost','round','paid','due','qty','cess','price','return'] }
+];
+const FK = FIELDS.map(f => f.key);
+const IX = {}; FK.forEach((k, i) => IX[k] = i);
+const TEXT_COUNT = 8;
+const DIMS = ['store', 'salesman', 'category', 'brand'];
+const PALETTE = ['#A4161A', '#E0A21B', '#1F7A4D', '#3D5A80', '#8E5572', '#C9733A', '#6B8F71', '#9AA5B1'];
+
+const S = {
+  demo: !CONFIG.API_URL,
+  uploads: [], cache: new Map(),
+  viewKey: '', adminKey: '', isAdmin: false,
+  has: {}, minDate: '', maxDate: '',
+  trendGran: 'auto', showAll: {}, heroAnimated: false,
+  up: null, uploading: false
+};
+const charts = {};
+const reduceMotion = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ---------- small helpers ---------- */
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+const pad = n => String(n).padStart(2, '0');
+const round2 = n => Math.round(n * 100) / 100;
+const norm = s => String(s ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+
+const nf0 = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 });
+const money = v => (v < 0 ? '-' : '') + '₹' + nf0.format(Math.abs(Math.round(v)));
+const num = v => nf0.format(Math.round(v));
+function short(v) {
+  const a = Math.abs(v), s = v < 0 ? '-' : '';
+  if (a >= 1e7) return s + '₹' + (a / 1e7).toFixed(2) + ' Cr';
+  if (a >= 1e5) return s + '₹' + (a / 1e5).toFixed(2) + ' L';
+  if (a >= 1e3) return s + '₹' + (a / 1e3).toFixed(1) + 'K';
+  return s + '₹' + Math.round(a);
+}
+
+/* ---------- dates (ISO yyyy-mm-dd strings, UTC maths) ---------- */
+const toD = s => { const [y, m, d] = s.split('-').map(Number); return new Date(Date.UTC(y, m - 1, d)); };
+const toS = dt => dt.toISOString().slice(0, 10);
+const addDays = (s, n) => { const d = toD(s); d.setUTCDate(d.getUTCDate() + n); return toS(d); };
+const endOfMonth = s => { const [y, m] = s.split('-').map(Number); return toS(new Date(Date.UTC(y, m, 0))); };
+const daysBetween = (a, b) => Math.round((toD(b) - toD(a)) / 864e5);
+function addMonths(s, n) {
+  const [y, m, d] = s.split('-').map(Number);
+  const t = new Date(Date.UTC(y, m - 1 + n, 1));
+  const last = new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth() + 1, 0)).getUTCDate();
+  t.setUTCDate(Math.min(d, last));
+  return toS(t);
+}
+function todayS() { const n = new Date(); return `${n.getFullYear()}-${pad(n.getMonth() + 1)}-${pad(n.getDate())}`; }
+function nowStamp() { const n = new Date(); return `${todayS()} ${pad(n.getHours())}:${pad(n.getMinutes())}`; }
+const wdCache = new Map();
+function weekday(s) { let w = wdCache.get(s); if (w === undefined) { w = (toD(s).getUTCDay() + 6) % 7; wdCache.set(s, w); } return w; }
+function mondayOf(s) { return addDays(s, -weekday(s)); }
+function fmtDate(s) { if (!s) return ''; const [y, m, d] = s.split('-'); return `${+d} ${MONTHS[+m - 1]} ${y}`; }
+function fmtRange(a, b) {
+  if (!a || !b) return '';
+  if (a === b) return fmtDate(a);
+  const [ya, ma, da] = a.split('-'), [yb, mb, db] = b.split('-');
+  if (ya === yb && ma === mb) {
+    if (+da === 1 && b === endOfMonth(b)) return `${MONTHS[+ma - 1]} ${ya}`;
+    return `${+da}–${+db} ${MONTHS[+mb - 1]} ${yb}`;
+  }
+  if (ya === yb) return `${+da} ${MONTHS[+ma - 1]} – ${+db} ${MONTHS[+mb - 1]} ${yb}`;
+  return `${fmtDate(a)} – ${fmtDate(b)}`;
+}
+const monthLabel = ym => { const [y, m] = ym.split('-'); return `${MONTHS[+m - 1]} ${y}`; };
+
+/* ---------- parsing values from ERP exports ---------- */
+const MON_IDX = { jan:1, feb:2, mar:3, apr:4, may:5, jun:6, jul:7, aug:8, sep:9, oct:10, nov:11, dec:12 };
+const fullYear = y => (y < 100 ? 2000 + y : y);
+function validYMD(y, m, d) {
+  if (!(y >= 1990 && y <= 2100 && m >= 1 && m <= 12 && d >= 1)) return null;
+  if (d > new Date(Date.UTC(y, m, 0)).getUTCDate()) return null;
+  return `${y}-${pad(m)}-${pad(d)}`;
+}
+function parseDate(v, order) {
+  if (v == null || v === '') return null;
+  if (v instanceof Date) return isNaN(v) ? null : validYMD(v.getFullYear(), v.getMonth() + 1, v.getDate());
+  if (typeof v === 'number') {
+    if (v > 20000 && v < 80000) { const d = new Date(Math.round((v - 25569) * 864e5)); return validYMD(d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate()); }
+    return null;
+  }
+  const s = String(v).trim();
+  let m = s.match(/^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})/);
+  if (m) return validYMD(+m[1], +m[2], +m[3]);
+  m = s.match(/^(\d{1,2})[-\/. ]([A-Za-z]{3,9})[-\/. ,]+(\d{2,4})/);
+  if (m) { const mo = MON_IDX[m[2].toLowerCase().slice(0, 3)]; return mo ? validYMD(fullYear(+m[3]), mo, +m[1]) : null; }
+  m = s.match(/^([A-Za-z]{3,9})[-\/. ](\d{1,2})[-\/. ,]+(\d{2,4})/);
+  if (m) { const mo = MON_IDX[m[1].toLowerCase().slice(0, 3)]; return mo ? validYMD(fullYear(+m[3]), mo, +m[2]) : null; }
+  m = s.match(/^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{2,4})/);
+  if (m) { const a = +m[1], b = +m[2], y = fullYear(+m[3]); return order === 'mdy' ? validYMD(y, a, b) : validYMD(y, b, a); }
+  if (/^\d{5}(\.\d+)?$/.test(s)) return parseDate(Number(s), order);
+  return null;
+}
+function parseNum(v) {
+  if (typeof v === 'number') return isFinite(v) ? v : null;
+  if (v == null) return null;
+  let s = String(v).trim();
+  if (!s) return null;
+  let neg = false;
+  if (/^\(.*\)$/.test(s)) { neg = true; s = s.slice(1, -1); }
+  if (/-$/.test(s)) { neg = true; s = s.slice(0, -1); }
+  s = s.replace(/₹|rs\.?|inr|,|\s/gi, '');
+  if (!/^[-+]?(\d+\.?\d*|\.\d+)$/.test(s)) return null;
+  const n = parseFloat(s);
+  return neg ? -Math.abs(n) : n;
+}
+
+/* ---------- API (Google Apps Script) ---------- */
+async function api(action, params = {}, write = false) {
+  if (S.demo) return demoApi(action, params);
+  let res;
+  if (!write) {
+    const q = new URLSearchParams({ action, ...params });
+    if (S.viewKey) q.set('viewKey', S.viewKey);
+    res = await fetch(CONFIG.API_URL + '?' + q.toString());
+  } else {
+    // text/plain body avoids a CORS preflight, which Apps Script does not answer
+    res = await fetch(CONFIG.API_URL, { method: 'POST', body: JSON.stringify({ action, viewKey: S.viewKey, adminKey: S.adminKey, ...params }) });
+  }
+  if (!res.ok) throw new Error('Google Apps Script returned error ' + res.status + '.');
+  const data = await res.json();
+  if (!data.ok) { const e = new Error(data.error || 'Request failed'); e.code = data.error; throw e; }
+  return data;
+}
+function errMsg(e) {
+  const map = {
+    VIEW_AUTH: 'That PIN did not match.',
+    ADMIN_AUTH: 'Wrong admin password.',
+    ADMIN_KEY_NOT_SET: 'The admin password is not set yet. Open Apps Script and run setupKeys() once.',
+    USE_POST: 'This action must be sent as a POST request.'
+  };
+  if (e && e.code && map[e.code]) return map[e.code];
+  if (e instanceof SyntaxError) return "Google Apps Script didn't send data back. Check that the deployment is a Web app with access set to Anyone, and that API_URL ends in /exec.";
+  if (e && /Failed to fetch|NetworkError|Load failed/i.test(e.message)) return "Couldn't reach Google Apps Script. Check the internet connection and the API_URL in index.html.";
+  return (e && e.message) || 'Something went wrong.';
+}
+async function withViewAuth(fn) {
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try { return await fn(); }
+    catch (e) {
+      if (e.code !== 'VIEW_AUTH') throw e;
+      const k = await askKey('Enter dashboard PIN', 'This dashboard is protected. Ask the owner for the PIN.', attempt ? 'That PIN did not match. Try again.' : '');
+      if (k === null) throw new Error('A PIN is needed to view this dashboard. Reload the page to try again.');
+      S.viewKey = k;
+    }
+  }
+  throw new Error('Too many wrong PIN attempts. Reload the page to try again.');
+}
+function askKey(title, message, error) {
+  return new Promise(resolve => {
+    const d = $('keyDlg'), inp = $('kdInput');
+    $('kdTitle').textContent = title; $('kdMsg').textContent = message; $('kdErr').textContent = error || '';
+    inp.value = '';
+    const finish = v => { cleanup(); if (d.open) d.close(); resolve(v); };
+    const ok = () => finish(inp.value);
+    const cancel = () => finish(null);
+    const onKey = e => { if (e.key === 'Enter') { e.preventDefault(); ok(); } };
+    const onCancel = e => { e.preventDefault(); cancel(); };
+    function cleanup() {
+      $('kdOk').removeEventListener('click', ok); $('kdCancel').removeEventListener('click', cancel);
+      inp.removeEventListener('keydown', onKey); d.removeEventListener('cancel', onCancel);
+    }
+    $('kdOk').addEventListener('click', ok); $('kdCancel').addEventListener('click', cancel);
+    inp.addEventListener('keydown', onKey); d.addEventListener('cancel', onCancel);
+    if (d.showModal) d.showModal(); else { const v = prompt(title); finish(v); return; }
+    inp.focus();
+  });
+}
+async function pool(items, n, fn) {
+  let i = 0;
+  const workers = Array.from({ length: Math.min(n, items.length) }, async () => {
+    while (i < items.length) { const it = items[i++]; await fn(it); }
+  });
+  await Promise.all(workers);
+}
+function normRow(r) {
+  const o = new Array(FK.length);
+  for (let i = 0; i < TEXT_COUNT; i++) o[i] = r[i] == null ? '' : String(r[i]);
+  for (let i = TEXT_COUNT; i < FK.length; i++) o[i] = Number(r[i]) || 0;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(o[0])) o[0] = parseDate(o[0], 'dmy') || o[0];
+  return o;
+}
+
+/* ---------- load ---------- */
+function setSync(t) { $('sync').textContent = t; }
+function showError(msg) { const b = $('errbar'); b.textContent = msg; b.hidden = !msg; }
+
+async function loadData() {
+  setSync('Loading data…');
+  showError('');
+  try {
+    const list = await withViewAuth(() => api('list'));
+    S.uploads = list.uploads || [];
+    const ready = S.uploads.filter(u => u.status === 'ready');
+    for (const id of [...S.cache.keys()]) if (!ready.some(u => u.id === id)) S.cache.delete(id);
+    const todo = ready.filter(u => !S.cache.has(u.id));
+    let done = 0;
+    await pool(todo, 3, async u => {
+      const d = await api('data', { id: u.id });
+      S.cache.set(u.id, (d.rows || []).map(normRow));
+      done++;
+      setSync(`Loading files ${done} of ${todo.length}…`);
+    });
+    computeMeta();
+    buildFilterOptions();
+    render();
+    renderFileList();
+    const n = new Date();
+    setSync(`Updated at ${pad(n.getHours())}:${pad(n.getMinutes())}`);
+  } catch (e) {
+    setSync('Not loaded');
+    showError(errMsg(e));
+    renderFileList();
+  }
+}
+
+function computeMeta() {
+  const has = { billNo: false, qty: false, discount: false, customer: 0, item: 0 };
+  const sets = { store: new Set(), salesman: new Set(), category: new Set(), brand: new Set(), item: new Set(), customer: new Set() };
+  let min = '', max = '';
+  for (const arr of S.cache.values()) {
+    for (const r of arr) {
+      const d = r[0];
+      if (!min || d < min) min = d;
+      if (!max || d > max) max = d;
+      if (!has.billNo && r[IX.billNo]) has.billNo = true;
+      if (!has.qty && r[IX.qty]) has.qty = true;
+      if (!has.discount && r[IX.discount]) has.discount = true;
+      for (const k of DIMS) if (r[IX[k]] && sets[k].size < 5000) sets[k].add(r[IX[k]]);
+      if (r[IX.item] && sets.item.size < 2) sets.item.add(r[IX.item]);
+      if (r[IX.customer] && sets.customer.size < 2) sets.customer.add(r[IX.customer]);
+    }
+  }
+  for (const k of DIMS) has[k] = sets[k].size;
+  has.item = sets.item.size; has.customer = sets.customer.size;
+  S.has = has; S.minDate = min; S.maxDate = max; S.dimSets = sets;
+}
+
+function buildFilterOptions() {
+  for (const k of DIMS) {
+    const sel = $('f' + k[0].toUpperCase() + k.slice(1));
+    const cur = sel.value;
+    const vals = [...S.dimSets[k]].sort((a, b) => a.localeCompare(b));
+    sel.innerHTML = '<option value="">All</option>' + vals.map(v => `<option>${esc(v)}</option>`).join('');
+    sel.value = vals.includes(cur) ? cur : '';
+    document.querySelector(`[data-filter="${k}"]`).hidden = vals.length < 2;
+  }
+  const ready = S.uploads.filter(u => u.status === 'ready');
+  const src = $('fSource'), cur = src.value;
+  src.innerHTML = '<option value="">All files</option>' + ready.map(u => `<option value="${esc(u.id)}">${esc(u.fileName)}</option>`).join('');
+  src.value = ready.some(u => u.id === cur) ? cur : '';
+  $('sourceFld').hidden = ready.length < 2;
+}
+
+/* ---------- filters & periods ---------- */
+function readFilters() {
+  return {
+    preset: $('fPreset').value, from: $('fFrom').value, to: $('fTo').value, source: $('fSource').value,
+    store: $('fStore').value, salesman: $('fSalesman').value, category: $('fCategory').value, brand: $('fBrand').value
+  };
+}
+function monthPrev(from, to) {
+  const pf = addMonths(from, -1);
+  const pt = to === endOfMonth(to) ? endOfMonth(addMonths(to.slice(0, 8) + '01', -1)) : addMonths(to, -1);
+  return { prevFrom: pf, prevTo: pt };
+}
+function periodFor(f) {
+  const today = todayS();
+  const fyStart = +today.slice(5, 7) >= 4 ? `${today.slice(0, 4)}-04-01` : `${+today.slice(0, 4) - 1}-04-01`;
+  const sameLength = (from, to) => { const n = daysBetween(from, to) + 1; return { prevFrom: addDays(from, -n), prevTo: addDays(from, -1) }; };
+  switch (f.preset) {
+    case 'all': return { from: '', to: '' };
+    case 'latest': { const to = S.maxDate || today, from = to.slice(0, 8) + '01'; return { from, to, ...monthPrev(from, to) }; }
+    case 'thisMonth': { const from = today.slice(0, 8) + '01'; return { from, to: today, ...monthPrev(from, today) }; }
+    case 'lastMonth': { const from = addMonths(today.slice(0, 8) + '01', -1), to = endOfMonth(from); return { from, to, ...monthPrev(from, to) }; }
+    case 'last7': { const from = addDays(today, -6); return { from, to: today, ...sameLength(from, today) }; }
+    case 'last30': { const from = addDays(today, -29); return { from, to: today, ...sameLength(from, today) }; }
+    case 'thisFY': return { from: fyStart, to: today, prevFrom: addMonths(fyStart, -12), prevTo: addMonths(today, -12) };
+    case 'lastFY': { const from = addMonths(fyStart, -12), to = addDays(fyStart, -1); return { from, to, prevFrom: addMonths(from, -12), prevTo: addDays(from, -1) }; }
+    default: {
+      let from = f.from || S.minDate, to = f.to || S.maxDate;
+      if (!from || !to) return { from: '', to: '' };
+      if (from > to) [from, to] = [to, from];
+      return { from, to, ...sameLength(from, to) };
+    }
+  }
+}
+function sourceArrays(source) {
+  if (source) return S.cache.has(source) ? [S.cache.get(source)] : [];
+  return [...S.cache.values()];
+}
+function filterRows(f, from, to) {
+  const out = [];
+  for (const arr of sourceArrays(f.source)) {
+    for (const r of arr) {
+      const d = r[0];
+      if (from && d < from) continue;
+      if (to && d > to) continue;
+      if (f.store && r[IX.store] !== f.store) continue;
+      if (f.salesman && r[IX.salesman] !== f.salesman) continue;
+      if (f.category && r[IX.category] !== f.category) continue;
+      if (f.brand && r[IX.brand] !== f.brand) continue;
+      out.push(r);
+    }
+  }
+  return out;
+}
+
+/* ---------- aggregation ---------- */
+function summarize(rows) {
+  let sales = 0, qty = 0, disc = 0, min = '', max = '';
+  const bills = new Set(), custs = new Set(), dates = new Set();
+  for (const r of rows) {
+    sales += r[IX.amount]; qty += r[IX.qty]; disc += Math.abs(r[IX.discount]);
+    if (r[IX.billNo]) bills.add(r[IX.store] + '|' + r[IX.billNo]);
+    if (r[IX.customer]) custs.add(r[IX.customer]);
+    dates.add(r[0]);
+    if (!min || r[0] < min) min = r[0];
+    if (!max || r[0] > max) max = r[0];
+  }
+  const billCount = S.has.billNo ? bills.size : rows.length;
+  return {
+    lines: rows.length, sales, qty, disc, bills: billCount, customers: custs.size, days: dates.size, min, max,
+    atv: billCount ? sales / billCount : 0, upt: billCount ? qty / billCount : 0,
+    perDay: dates.size ? sales / dates.size : 0,
+    discPct: (sales + disc) > 0 ? disc / (sales + disc) * 100 : 0
+  };
+}
+function groupBy(rows, idx) {
+  const m = new Map();
+  for (const r of rows) {
+    const k = r[idx] || '(blank)';
+    let g = m.get(k);
+    if (!g) { g = { name: k, sales: 0, qty: 0, disc: 0, lines: 0, bills: new Set(), cat: r[IX.category] }; m.set(k, g); }
+    g.sales += r[IX.amount]; g.qty += r[IX.qty]; g.disc += Math.abs(r[IX.discount]); g.lines++;
+    if (r[IX.billNo]) g.bills.add(r[IX.store] + '|' + r[IX.billNo]);
+  }
+  return [...m.values()].map(g => {
+    const b = S.has.billNo ? g.bills.size : g.lines;
+    return { name: g.name, cat: g.cat, sales: g.sales, qty: g.qty, disc: g.disc, lines: g.lines, bills: b,
+      atv: b ? g.sales / b : 0, upt: b ? g.qty / b : 0, discPct: (g.sales + g.disc) > 0 ? g.disc / (g.sales + g.disc) * 100 : 0 };
+  }).sort((a, b) => b.sales - a.sales);
+}
+function deltaHtml(cur, prev, opt = {}) {
+  if (prev == null) return '';
+  if (opt.points) {
+    const diff = cur - prev;
+    const cls = Math.abs(diff) < 0.05 ? 'flat' : ((diff > 0) !== !!opt.inverse ? 'up' : 'down');
+    return `<span class="${cls}">${diff > 0.05 ? '▲' : diff < -0.05 ? '▼' : ''} ${Math.abs(diff).toFixed(1)} pts</span>`;
+  }
+  if (!prev) return '';
+  const pct = (cur - prev) / Math.abs(prev) * 100;
+  const cls = Math.abs(pct) < 0.05 ? 'flat' : ((pct > 0) !== !!opt.inverse ? 'up' : 'down');
+  return `<span class="${cls}">${pct > 0.05 ? '▲' : pct < -0.05 ? '▼' : ''} ${Math.abs(pct).toFixed(1)}%</span>`;
+}
+
+/* ---------- render ---------- */
+function render() {
+  const f = readFilters();
+  const p = periodFor(f);
+  if (f.preset !== 'custom') { $('fFrom').value = p.from; $('fTo').value = p.to; }
+
+  const hasData = [...S.cache.values()].some(a => a.length);
+  $('emptyNoData').hidden = hasData;
+  const cur = hasData ? filterRows(f, p.from, p.to) : [];
+  $('emptyFilter').hidden = !hasData || cur.length > 0;
+  $('dash').hidden = !cur.length;
+
+  const prevRows = p.prevFrom && cur.length ? filterRows(f, p.prevFrom, p.prevTo) : null;
+  const c = summarize(cur);
+  const pv = prevRows && prevRows.length ? summarize(prevRows) : null;
+  renderHero(c, pv, p, f);
+  if (!cur.length) return;
+
+  document.querySelectorAll('[data-need]').forEach(el => {
+    const k = el.dataset.need;
+    el.hidden = k === 'store' ? S.has.store < 2 : !S.has[k];
+  });
+  renderKpis(c, pv);
+  renderTrend(cur, p);
+  if (S.has.category) renderCategory(cur);
+  if (S.has.salesman) renderRankTable('tSalesman', cur, IX.salesman, 'Salesperson');
+  if (S.has.store >= 2) renderRankTable('tStore', cur, IX.store, 'Store');
+  renderWeekday(cur);
+  if (S.has.item) renderItems(cur);
+  if (S.has.brand) renderBrands(cur);
+  renderMonths(filterRows(f, '', ''));
+}
+
+function renderHero(c, pv, p, f) {
+  const ctx = [f.store, f.salesman, f.category, f.brand].filter(Boolean);
+  const range = p.from ? fmtRange(p.from, p.to) : (c.min ? `all data, ${fmtRange(c.min, c.max)}` : 'all data');
+  $('heroLabel').textContent = `Net sales, ${range}${ctx.length ? ' (' + ctx.join(', ') + ')' : ''}`;
+  setHero(c.sales);
+  let d = '';
+  if (p.prevFrom && c.lines) {
+    if (pv && pv.sales) {
+      const pct = (c.sales - pv.sales) / Math.abs(pv.sales) * 100;
+      d = `<span class="chip">${pct >= 0 ? '▲' : '▼'} ${Math.abs(pct).toFixed(1)}%</span>vs ${money(pv.sales)} in ${fmtRange(p.prevFrom, p.prevTo)}`;
+    } else {
+      d = `No uploaded sales for ${fmtRange(p.prevFrom, p.prevTo)} to compare with`;
+    }
+  }
+  $('heroDelta').innerHTML = d;
+}
+function setHero(v) {
+  const el = $('heroValue');
+  if (S.heroAnimated || reduceMotion || !v) { el.textContent = money(v); return; }
+  S.heroAnimated = true;
+  const t0 = performance.now(), dur = 900;
+  const step = t => {
+    const k = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - k, 3);
+    el.textContent = money(v * e);
+    if (k < 1) requestAnimationFrame(step); else el.textContent = money(v);
+  };
+  requestAnimationFrame(step);
+}
+
+function renderKpis(c, pv) {
+  const H = S.has;
+  const items = [
+    { label: H.billNo ? 'Bills' : 'Sale lines', value: num(c.bills), d: deltaHtml(c.bills, pv && pv.bills) },
+    { label: 'Average bill value', value: money(c.atv), d: deltaHtml(c.atv, pv && pv.atv), show: H.billNo },
+    { label: 'Quantity sold', value: num(c.qty), d: deltaHtml(c.qty, pv && pv.qty), show: H.qty },
+    { label: 'Units per bill', value: c.upt.toFixed(2), d: deltaHtml(c.upt, pv && pv.upt), show: H.qty && H.billNo },
+    { label: 'Average sales per day', value: money(c.perDay), d: deltaHtml(c.perDay, pv && pv.perDay) },
+    { label: 'Discount given', value: c.discPct.toFixed(1) + '%', d: deltaHtml(c.discPct, pv ? pv.discPct : null, { points: true, inverse: true }), sub: money(c.disc), show: H.discount },
+    { label: 'Customers', value: num(c.customers), d: deltaHtml(c.customers, pv && pv.customers), show: !!H.customer }
+  ].filter(x => x.show !== false);
+  $('kpis').innerHTML = items.map(x => `
+    <div class="kpi">
+      <div class="kpi-label">${x.label}</div>
+      <div class="kpi-value">${x.value}</div>
+      <div class="kpi-delta">${x.d}${x.sub ? ` <span class="flat">${x.sub}</span>` : ''}</div>
+    </div>`).join('');
+}
+
+/* ---------- charts ---------- */
+function drawChart(id, config) {
+  if (!window.Chart) return;
+  if (charts[id]) charts[id].destroy();
+  config.options = Object.assign({ responsive: true, maintainAspectRatio: false, animation: reduceMotion ? false : { duration: 350 } }, config.options || {});
+  charts[id] = new Chart($(id), config);
+}
+const gridColor = '#E8EDF1';
+
+function renderTrend(rows, p) {
+  let from = p.from, to = p.to;
+  if (!from || !to) { from = rows[0][0]; to = rows[0][0]; for (const r of rows) { if (r[0] < from) from = r[0]; if (r[0] > to) to = r[0]; } }
+  const span = daysBetween(from, to) + 1;
+  const auto = S.trendGran === 'auto';
+  let g = auto ? (span <= 62 ? 'day' : span <= 200 ? 'week' : 'month') : S.trendGran;
+  if (g === 'day' && span > 1100) g = 'month';
+
+  const keyOf = g === 'day' ? d => d : g === 'week' ? mondayOf : d => d.slice(0, 7);
+  const sums = new Map();
+  for (const r of rows) { const k = keyOf(r[0]); sums.set(k, (sums.get(k) || 0) + r[IX.amount]); }
+  const keys = [];
+  if (g === 'day') for (let d = from; d <= to; d = addDays(d, 1)) keys.push(d);
+  else if (g === 'week') for (let d = mondayOf(from); d <= to; d = addDays(d, 7)) keys.push(d);
+  else for (let d = from.slice(0, 8) + '01'; d <= to; d = addMonths(d, 1)) keys.push(d.slice(0, 7));
+
+  const labels = keys.map(k => g === 'month' ? `${MONTHS[+k.slice(5, 7) - 1]} ${k.slice(2, 4)}` : `${+k.slice(8)} ${MONTHS[+k.slice(5, 7) - 1]}`);
+  const titles = keys.map(k => g === 'month' ? monthLabel(k) : g === 'week' ? `Week of ${fmtDate(k)}` : `${DAYS[weekday(k)]}, ${fmtDate(k)}`);
+  const values = keys.map(k => round2(sums.get(k) || 0));
+
+  document.querySelectorAll('#granSeg button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.gran === S.trendGran)));
+  $('trendNote').textContent = (g === 'day' ? 'Net sales per day' : g === 'week' ? 'Net sales per week, weeks start Monday' : 'Net sales per month') + (auto ? ', grouped automatically' : '');
+
+  const isBar = g === 'month' || keys.length <= 14;
+  drawChart('cTrend', {
+    type: isBar ? 'bar' : 'line',
+    data: { labels, datasets: [{
+      data: values, borderColor: '#A4161A', backgroundColor: isBar ? '#A4161A' : 'rgba(164,22,26,.08)',
+      fill: !isBar, tension: .25, borderWidth: 2, pointRadius: keys.length > 60 ? 0 : 2.5, pointHoverRadius: 4, maxBarThickness: 46, borderRadius: isBar ? 2 : 0
+    }] },
+    options: {
+      interaction: { mode: 'index', intersect: false },
+      scales: {
+        x: { grid: { display: false }, ticks: { maxRotation: 0, autoSkip: true, maxTicksLimit: 10 } },
+        y: { beginAtZero: true, grid: { color: gridColor }, ticks: { callback: v => short(v) } }
+      },
+      plugins: { legend: { display: false }, tooltip: { callbacks: { title: it => titles[it[0].dataIndex], label: c => ' ' + money(c.parsed.y) } } }
+    }
+  });
+}
+
+function renderCategory(rows) {
+  const groups = groupBy(rows, IX.category);
+  const top = groups.slice(0, 7);
+  const rest = groups.slice(7).reduce((s, g) => s + g.sales, 0);
+  const labels = top.map(g => g.name), values = top.map(g => Math.max(0, round2(g.sales)));
+  if (rest > 0) { labels.push('Others'); values.push(round2(rest)); }
+  const total = values.reduce((s, v) => s + v, 0) || 1;
+  drawChart('cCat', {
+    type: 'doughnut',
+    data: { labels, datasets: [{ data: values, backgroundColor: PALETTE, borderColor: '#fff', borderWidth: 2 }] },
+    options: {
+      cutout: '60%',
+      plugins: {
+        legend: { position: 'bottom', labels: { boxWidth: 10, boxHeight: 10, padding: 10 } },
+        tooltip: { callbacks: { label: c => ` ${c.label}: ${money(c.parsed)} (${(c.parsed / total * 100).toFixed(1)}%)` } }
+      }
+    }
+  });
+}
+
+function renderWeekday(rows) {
+  const tot = Array(7).fill(0), dates = Array.from({ length: 7 }, () => new Set());
+  for (const r of rows) { const w = weekday(r[0]); tot[w] += r[IX.amount]; dates[w].add(r[0]); }
+  const avg = tot.map((t, i) => round2(dates[i].size ? t / dates[i].size : 0));
+  const best = avg.indexOf(Math.max(...avg));
+  drawChart('cWeek', {
+    type: 'bar',
+    data: { labels: DAYS, datasets: [{ data: avg, backgroundColor: avg.map((_, i) => i === best ? '#A4161A' : '#C9D3DD'), maxBarThickness: 40, borderRadius: 2 }] },
+    options: {
+      scales: { x: { grid: { display: false } }, y: { beginAtZero: true, grid: { color: gridColor }, ticks: { callback: v => short(v) } } },
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => ` ${money(c.parsed.y)} average, ${dates[c.dataIndex].size} days` } } }
+    }
+  });
+}
+
+function renderBrands(rows) {
+  const groups = groupBy(rows, IX.brand).slice(0, 10);
+  drawChart('cBrand', {
+    type: 'bar',
+    data: { labels: groups.map(g => g.name), datasets: [{ data: groups.map(g => round2(g.sales)), backgroundColor: '#3D5A80', maxBarThickness: 22, borderRadius: 2 }] },
+    options: {
+      indexAxis: 'y',
+      scales: { x: { beginAtZero: true, grid: { color: gridColor }, ticks: { callback: v => short(v), maxTicksLimit: 5 } }, y: { grid: { display: false } } },
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => ' ' + money(c.parsed.x) } } }
+    }
+  });
+}
+
+/* ---------- tables ---------- */
+function moreButton(id, count, limit) {
+  if (count <= 10) return '';
+  return `<button class="btn btn-plain more" type="button" data-more="${id}">${S.showAll[id] ? 'Show top 10' : `Show all ${num(Math.min(count, limit))}`}</button>`;
+}
+function shareCell(sales, total, max) {
+  const pct = total > 0 ? sales / total * 100 : 0;
+  const w = max > 0 ? Math.max(0, Math.min(100, sales / max * 100)) : 0;
+  return `<td class="share"><span>${pct.toFixed(1)}%</span><div class="bar"><i style="width:${w.toFixed(1)}%"></i></div></td>`;
+}
+function renderRankTable(id, rows, idx, nameLabel) {
+  const H = S.has;
+  const groups = groupBy(rows, idx);
+  const total = groups.reduce((s, g) => s + g.sales, 0);
+  const max = groups.length ? groups[0].sales : 0;
+  const list = S.showAll[id] ? groups.slice(0, 300) : groups.slice(0, 10);
+  const head = `<tr><th class="l">#</th><th class="l">${nameLabel}</th><th>Net sales</th><th class="l">Share</th>
+    <th>${H.billNo ? 'Bills' : 'Lines'}</th>${H.billNo ? '<th>Avg bill</th>' : ''}${H.qty ? '<th>Qty</th>' : ''}${H.qty && H.billNo ? '<th>Units/bill</th>' : ''}${H.discount ? '<th>Discount</th>' : ''}</tr>`;
+  const body = list.map((g, i) => `<tr><td class="rank">${i + 1}</td><td class="name">${esc(g.name)}</td><td>${money(g.sales)}</td>${shareCell(g.sales, total, max)}
+    <td>${num(g.bills)}</td>${H.billNo ? `<td>${money(g.atv)}</td>` : ''}${H.qty ? `<td>${num(g.qty)}</td>` : ''}${H.qty && H.billNo ? `<td>${g.upt.toFixed(2)}</td>` : ''}${H.discount ? `<td>${g.discPct.toFixed(1)}%</td>` : ''}</tr>`).join('');
+  $(id).innerHTML = `<table><thead>${head}</thead><tbody>${body}</tbody></table>${moreButton(id, groups.length, 300)}`;
+}
+function renderItems(rows) {
+  const H = S.has, id = 'tItem';
+  const groups = groupBy(rows, IX.item);
+  const total = groups.reduce((s, g) => s + g.sales, 0);
+  const max = groups.length ? groups[0].sales : 0;
+  const list = S.showAll[id] ? groups.slice(0, 100) : groups.slice(0, 10);
+  const showCat = H.category && !$('fCategory').value;
+  $(id).innerHTML = `<table><thead><tr><th class="l">#</th><th class="l">Item</th>${showCat ? '<th class="l">Category</th>' : ''}${H.qty ? '<th>Qty</th>' : ''}<th>Net sales</th><th class="l">Share</th></tr></thead>
+    <tbody>${list.map((g, i) => `<tr><td class="rank">${i + 1}</td><td class="name">${esc(g.name)}</td>${showCat ? `<td class="l">${esc(g.cat || '')}</td>` : ''}${H.qty ? `<td>${num(g.qty)}</td>` : ''}<td>${money(g.sales)}</td>${shareCell(g.sales, total, max)}</tr>`).join('')}</tbody></table>
+    ${moreButton(id, groups.length, 100)}`;
+}
+function renderMonths(rows) {
+  const H = S.has, m = new Map();
+  for (const r of rows) {
+    const k = r[0].slice(0, 7);
+    let g = m.get(k);
+    if (!g) { g = { sales: 0, qty: 0, disc: 0, lines: 0, bills: new Set() }; m.set(k, g); }
+    g.sales += r[IX.amount]; g.qty += r[IX.qty]; g.disc += Math.abs(r[IX.discount]); g.lines++;
+    if (r[IX.billNo]) g.bills.add(r[IX.store] + '|' + r[IX.billNo]);
+  }
+  const keys = [...m.keys()].sort().reverse().slice(0, 36);
+  const body = keys.map(k => {
+    const g = m.get(k), b = H.billNo ? g.bills.size : g.lines;
+    const prevKey = addMonths(k + '-01', -1).slice(0, 7), pg = m.get(prevKey);
+    const growth = pg && pg.sales ? deltaHtml(g.sales, pg.sales) : '<span class="flat">–</span>';
+    const disc = (g.sales + g.disc) > 0 ? g.disc / (g.sales + g.disc) * 100 : 0;
+    return `<tr><td class="l">${monthLabel(k)}</td><td>${money(g.sales)}</td><td>${growth}</td><td>${num(b)}</td>${H.billNo ? `<td>${money(b ? g.sales / b : 0)}</td>` : ''}${H.qty ? `<td>${num(g.qty)}</td>` : ''}${H.discount ? `<td>${disc.toFixed(1)}%</td>` : ''}</tr>`;
+  }).join('');
+  $('tMonth').innerHTML = `<table><thead><tr><th class="l">Month</th><th>Net sales</th><th>vs previous month</th><th>${H.billNo ? 'Bills' : 'Lines'}</th>${H.billNo ? '<th>Avg bill</th>' : ''}${H.qty ? '<th>Qty</th>' : ''}${H.discount ? '<th>Discount</th>' : ''}</tr></thead><tbody>${body}</tbody></table>`;
+}
+
+/* ---------- export ---------- */
+function exportCsv() {
+  const f = readFilters(), p = periodFor(f);
+  const rows = filterRows(f, p.from, p.to);
+  if (!rows.length) return toast('Nothing to export for these filters.');
+  const q = v => { const s = String(v ?? ''); return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+  const csv = '\ufeff' + [FIELDS.map(x => x.label), ...rows].map(r => r.map(q).join(',')).join('\r\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+  a.download = `sales_${p.from || 'all'}${p.to ? '_to_' + p.to : ''}.csv`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 3000);
+  toast(`Exported ${num(rows.length)} rows.`);
+}
+
+let toastTimer;
+function toast(t) {
+  const el = $('toast'); el.textContent = t; el.hidden = false;
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => { el.hidden = true; }, 3500);
+}
+
+/* ---------- drawer, admin, file list ---------- */
+function openDrawer() {
+  $('drawer').classList.add('open'); $('scrim').classList.add('open');
+  $('drawer').setAttribute('aria-hidden', 'false');
+  renderFileList();
+  setTimeout(() => (S.isAdmin ? $('dropzone') : $('adminKey')).focus(), 50);
+}
+function closeDrawer() {
+  $('drawer').classList.remove('open'); $('scrim').classList.remove('open');
+  $('drawer').setAttribute('aria-hidden', 'true');
+  $('btnManage').focus();
+}
+function setMsg(id, text, kind) { const el = $(id); el.textContent = text || ''; el.className = 'msg' + (kind ? ' ' + kind : ''); }
+
+async function unlock() {
+  const k = $('adminKey').value;
+  if (!k) return setMsg('lockMsg', 'Enter the admin password.', 'err');
+  S.adminKey = k;
+  setMsg('lockMsg', 'Checking…');
+  try {
+    await api('checkAdmin', {}, true);
+    S.isAdmin = true;
+    $('adminKey').value = '';
+    setMsg('lockMsg', '');
+    $('lockBox').hidden = true; $('uploadBox').hidden = false;
+    renderFileList();
+    $('dropzone').focus();
+  } catch (e) {
+    S.adminKey = ''; S.isAdmin = false;
+    setMsg('lockMsg', errMsg(e), 'err');
+  }
+}
+function lock() {
+  S.adminKey = ''; S.isAdmin = false; S.up = null;
+  $('uploadBox').hidden = true; $('lockBox').hidden = false; $('wizard').hidden = true;
+  renderFileList();
+}
+
+function renderFileList() {
+  const el = $('fileList');
+  if (!S.uploads.length) { el.innerHTML = '<p class="note">No files uploaded yet.</p>'; return; }
+  const list = [...S.uploads].sort((a, b) => String(b.uploadedAt).localeCompare(String(a.uploadedAt)));
+  el.innerHTML = list.map(u => `
+    <div class="file-item">
+      <div>
+        <div class="file-name">${esc(u.fileName)}</div>
+        <div class="file-meta">${u.status === 'ready'
+          ? `${fmtRange(u.dateFrom, u.dateTo)}<br>${num(u.rows)} rows, net sales ${money(u.totalAmount)}`
+          : 'Upload did not finish. Delete it and upload the file again.'}<br>Uploaded ${esc(u.uploadedAt)}</div>
+      </div>
+      ${S.isAdmin ? `<button class="btn btn-danger" type="button" data-del="${esc(u.id)}">Delete</button>` : ''}
+    </div>`).join('');
+}
+async function deleteFile(id) {
+  const u = S.uploads.find(x => x.id === id);
+  if (!u) return;
+  if (!confirm(`Delete "${u.fileName}"?\n\nIts ${num(u.rows)} rows will be removed from the Google Sheet and the dashboard. This can't be undone.`)) return;
+  try {
+    await api('delete', { id }, true);
+    S.cache.delete(id);
+    toast(`Deleted ${u.fileName}.`);
+    await loadData();
+  } catch (e) { toast(errMsg(e)); }
+}
+
+/* ---------- upload wizard ---------- */
+async function readWorkbook(file) {
+  if (!window.XLSX) throw new Error('The spreadsheet reader did not load. Check the internet connection and reload the page.');
+  const ext = file.name.split('.').pop().toLowerCase();
+  if (ext === 'csv' || ext === 'txt') return XLSX.read(await file.text(), { type: 'string', raw: true });
+  return XLSX.read(await file.arrayBuffer(), { type: 'array' });
+}
+const ALL_SYN = new Set(FIELDS.flatMap(f => f.syn));
+function detectHeader(matrix) {
+  let best = 0, bestScore = 0;
+  for (let r = 0; r < Math.min(matrix.length, 40); r++) {
+    let score = 0;
+    for (const c of matrix[r] || []) {
+      if (typeof c !== 'string') continue;
+      const n = norm(c);
+      if (!n) continue;
+      if (ALL_SYN.has(n)) score += 2;
+      else if (FIELDS.some(f => f.syn.some(s => s.length >= 4 && n.includes(s)))) score += 1;
+    }
+    if (score > bestScore) { best = r; bestScore = score; }
+  }
+  return best;
+}
+function autoMap(headers) {
+  const H = headers.map(norm), used = new Set(), map = {};
+  for (const f of FIELDS) {
+    for (const s of f.syn) {
+      const i = H.findIndex((h, j) => h === s && !used.has(j));
+      if (i >= 0) { map[f.key] = i; used.add(i); break; }
+    }
+  }
+  for (const f of FIELDS) {
+    if (map[f.key] != null) continue;
+    outer: for (const s of f.syn) {
+      if (s.length < 3) continue;
+      for (let j = 0; j < H.length; j++) {
+        const h = H[j];
+        if (!h || used.has(j) || !h.includes(s) || f.not.some(x => h.includes(x))) continue;
+        map[f.key] = j; used.add(j); break outer;
+      }
+    }
+  }
+  return map;
+}
+function guessDateOrder(u) {
+  const col = u.map.date;
+  if (col == null) return 'dmy';
+  let dmy = 0, mdy = 0;
+  for (let r = u.headerRow + 1, seen = 0; r < u.matrix.length && seen < 800; r++, seen++) {
+    const v = u.matrix[r] && u.matrix[r][col];
+    if (typeof v !== 'string') continue;
+    const m = v.trim().match(/^(\d{1,2})[-\/.](\d{1,2})[-\/.]\d{2,4}/);
+    if (!m) continue;
+    if (+m[1] > 12) dmy++;
+    if (+m[2] > 12) mdy++;
+  }
+  return mdy > 0 && dmy === 0 ? 'mdy' : 'dmy';
+}
+
+async function onFile(file) {
+  if (!file || S.uploading) return;
+  setMsg('fileMsg', 'Reading ' + file.name + '…');
+  setMsg('uploadMsg', '');
+  $('wizard').hidden = true;
+  try {
+    const wb = await readWorkbook(file);
+    const sheets = wb.SheetNames.filter(n => wb.Sheets[n] && wb.Sheets[n]['!ref']);
+    if (!sheets.length) throw new Error('This file has no data.');
+    S.up = { file, wb, sheet: '', matrix: [], headerRow: 0, map: {}, dateOrder: 'dmy', rows: [] };
+    let first = sheets[0], most = -1;
+    for (const n of sheets) { const r = XLSX.utils.decode_range(wb.Sheets[n]['!ref']); const cnt = r.e.r - r.s.r; if (cnt > most) { most = cnt; first = n; } }
+    $('sheetSel').innerHTML = sheets.map(n => `<option>${esc(n)}</option>`).join('');
+    $('sheetSel').value = first;
+    $('sheetFld').hidden = sheets.length < 2;
+    loadSheet(first);
+    setMsg('fileMsg', file.name, 'ok');
+    $('wizard').hidden = false;
+  } catch (e) {
+    S.up = null;
+    setMsg('fileMsg', "Couldn't read this file: " + errMsg(e), 'err');
+  }
+}
+function loadSheet(name) {
+  const u = S.up;
+  u.sheet = name;
+  u.matrix = XLSX.utils.sheet_to_json(u.wb.Sheets[name], { header: 1, raw: true, defval: '', blankrows: false });
+  u.headerRow = detectHeader(u.matrix);
+  $('headerSel').innerHTML = u.matrix.slice(0, 40).map((row, i) => {
+    const txt = row.filter(c => c !== '' && c != null).slice(0, 6).join(' | ');
+    return `<option value="${i}">Row ${i + 1}: ${esc(txt.length > 70 ? txt.slice(0, 70) + '…' : txt)}</option>`;
+  }).join('');
+  $('headerSel').value = String(u.headerRow);
+  applyHeader();
+}
+function applyHeader() {
+  const u = S.up;
+  const headers = (u.matrix[u.headerRow] || []).map(String);
+  u.map = autoMap(headers);
+  u.dateOrder = guessDateOrder(u);
+  $('dateOrder').value = u.dateOrder;
+  renderMapping();
+  renderPreview();
+}
+function renderMapping() {
+  const u = S.up;
+  const headers = u.matrix[u.headerRow] || [];
+  const sampleRow = u.matrix[u.headerRow + 1] || [];
+  const opts = headers.map((h, i) => {
+    const name = String(h).trim() || `Column ${i + 1}`;
+    const sample = sampleRow[i] !== '' && sampleRow[i] != null ? ` (e.g. ${String(sampleRow[i]).slice(0, 24)})` : '';
+    return `<option value="${i}">${esc(name + sample)}</option>`;
+  }).join('');
+  $('mapGrid').innerHTML = FIELDS.map(f => `
+    <label for="map_${f.key}">${esc(f.label)}${f.required ? ' <span class="req">*</span>' : ''}</label>
+    <select id="map_${f.key}" data-map="${f.key}" class="${u.map[f.key] == null ? 'unset' : ''}">
+      <option value="">${f.required ? 'Pick a column' : 'Not in this file'}</option>${opts}
+    </select>`).join('');
+  FIELDS.forEach(f => { $('map_' + f.key).value = u.map[f.key] == null ? '' : String(u.map[f.key]); });
+}
+function buildRows() {
+  const u = S.up, rows = [];
+  let skipped = 0, badDate = 0, min = '', max = '', total = 0;
+  const col = k => u.map[k];
+  for (let r = u.headerRow + 1; r < u.matrix.length; r++) {
+    const row = u.matrix[r];
+    if (!row || row.every(c => c === '' || c == null)) continue;
+    const get = k => col(k) == null ? '' : row[col(k)];
+    const rawDate = get('date');
+    const d = parseDate(rawDate, u.dateOrder);
+    const amt = parseNum(get('amount'));
+    if (!d || amt === null) { skipped++; if (!d && rawDate !== '' && amt !== null) badDate++; continue; }
+    const out = [d];
+    for (let i = 1; i < TEXT_COUNT; i++) { const v = get(FK[i]); out.push(v == null ? '' : String(v).trim()); }
+    out.push(round2(parseNum(get('qty')) || 0), round2(Math.abs(parseNum(get('discount')) || 0)), round2(amt));
+    rows.push(out);
+    total += amt;
+    if (!min || d < min) min = d;
+    if (!max || d > max) max = d;
+  }
+  Object.assign(u, { rows, skipped, badDate, min, max, total: round2(total) });
+}
+function renderPreview() {
+  const u = S.up, box = $('preview'), btn = $('btnUpload');
+  if (u.map.date == null || u.map.amount == null) {
+    u.rows = [];
+    box.innerHTML = '<div class="warn">Pick the columns for <strong>Bill date</strong> and <strong>Net sales amount</strong> to continue.</div>';
+    btn.disabled = true; btn.textContent = 'Upload';
+    return;
+  }
+  buildRows();
+  const warns = [];
+  if (!u.rows.length) warns.push('No usable rows found. Check the row with column names, the date column and the date format.');
+  if (u.badDate > 5 && u.badDate > u.rows.length * 0.2) warns.push(`${num(u.badDate)} rows have an amount but a date that couldn't be read. Try the other date format, or pick a different date column.`);
+  for (const x of S.uploads) {
+    if (x.status !== 'ready') continue;
+    if (x.fileName === u.file.name) warns.push(`A file named "${esc(x.fileName)}" is already uploaded. Delete the old one first if this is a corrected copy.`);
+    else if (u.rows.length && x.dateFrom <= u.max && x.dateTo >= u.min) warns.push(`Dates overlap with "${esc(x.fileName)}" (${fmtRange(x.dateFrom, x.dateTo)}). If both files have the same bills, those sales will be counted twice.`);
+  }
+  const mapped = FIELDS.filter(f => u.map[f.key] != null);
+  const cell = (k, v) => k === 'date' ? fmtDate(v) : (k === 'amount' || k === 'discount') ? money(v) : k === 'qty' ? num(v) : v;
+  const sample = u.rows.slice(0, 5);
+  box.innerHTML = `
+    <div class="summary">
+      <p><strong>${num(u.rows.length)} sales rows ready</strong>${u.rows.length ? ` from ${fmtRange(u.min, u.max)}, net sales ${money(u.total)}` : ''}</p>
+      ${u.skipped ? `<p class="note">${num(u.skipped)} ${u.skipped === 1 ? 'row' : 'rows'} skipped because they had no readable date or amount, such as totals or sub-headings.</p>` : ''}
+    </div>
+    ${warns.map(w => `<div class="warn">${w}</div>`).join('')}
+    ${sample.length ? `<div class="tbl-wrap"><table class="preview-tbl"><thead><tr>${mapped.map(f => `<th class="l">${esc(f.label)}</th>`).join('')}</tr></thead>
+      <tbody>${sample.map(r => `<tr>${mapped.map(f => `<td class="l">${esc(cell(f.key, r[IX[f.key]]))}</td>`).join('')}</tr>`).join('')}</tbody></table></div>` : ''}`;
+  btn.disabled = !u.rows.length;
+  btn.textContent = u.rows.length ? `Upload ${num(u.rows.length)} rows` : 'Upload';
+}
+async function doUpload() {
+  const u = S.up;
+  if (!u || !u.rows.length || S.uploading) return;
+  S.uploading = true;
+  const btn = $('btnUpload'), bar = $('progress'), fill = bar.querySelector('i');
+  btn.disabled = true; bar.hidden = false; fill.style.width = '0%';
+  let id = null;
+  try {
+    setMsg('uploadMsg', 'Starting upload…');
+    id = (await api('uploadStart', { fileName: u.file.name, sourceSheet: u.sheet }, true)).id;
+    const n = u.rows.length, size = CONFIG.CHUNK_SIZE;
+    for (let i = 0; i < n; i += size) {
+      await api('uploadChunk', { id, rows: u.rows.slice(i, i + size) }, true);
+      const done = Math.min(n, i + size);
+      fill.style.width = (done / n * 100).toFixed(1) + '%';
+      setMsg('uploadMsg', `Uploaded ${num(done)} of ${num(n)} rows…`);
+    }
+    await api('uploadFinish', { id, rowCount: n, dateFrom: u.min, dateTo: u.max, totalAmount: u.total }, true);
+    const name = u.file.name;
+    S.up = null;
+    $('wizard').hidden = true; $('fileInput').value = ''; bar.hidden = true;
+    setMsg('fileMsg', ''); setMsg('uploadMsg', '');
+    toast(`Uploaded ${name}.`);
+    await loadData();
+  } catch (e) {
+    setMsg('uploadMsg', 'Upload stopped: ' + errMsg(e), 'err');
+    if (id) { try { await api('delete', { id }, true); } catch (_) { /* incomplete upload stays in list */ } }
+    btn.disabled = false;
+    await loadData();
+  } finally {
+    S.uploading = false;
+  }
+}
+
+/* ---------- demo mode (runs when API_URL is empty) ---------- */
+const DEMO = { uploads: [], data: new Map() };
+function buildDemo() {
+  let seed = 20260915;
+  const R = () => (seed = (seed * 1664525 + 1013904223) % 4294967296) / 4294967296;
+  const pick = a => a[Math.floor(R() * a.length)];
+  const stores = [
+    { name: 'Main Market Store', code: 'MM', f: 1.25, staff: ['Rohit K.', 'Priya V.', 'Imran A.'] },
+    { name: 'City Mall Store', code: 'CM', f: 1.0, staff: ['Sneha G.', 'Arjun M.', 'Neha S.'] },
+    { name: 'Highway Outlet', code: 'HW', f: 0.7, staff: ['Vikas Y.', 'Pooja R.'] }
+  ];
+  const cats = [
+    { c: "Men's Shirts", w: 18, p: [899, 1899], b: ['Urban Thread', 'Blue Rivet'], n: ['Oxford Shirt', 'Linen Shirt', 'Check Shirt', 'Printed Shirt'] },
+    { c: 'Jeans', w: 16, p: [1299, 2799], b: ['Blue Rivet', 'Urban Thread'], n: ['Slim Jeans', 'Straight Jeans', 'Stretch Jeans'] },
+    { c: 'Kurtas', w: 14, p: [799, 2499], b: ['Desi Loom'], n: ['Cotton Kurta', 'Chikan Kurta', 'Festive Kurta'] },
+    { c: 'Sarees', w: 8, p: [1499, 6999], b: ['Desi Loom', 'Silk Route'], n: ['Silk Saree', 'Georgette Saree', 'Cotton Saree'] },
+    { c: 'Footwear', w: 12, p: [999, 3499], b: ['Stride'], n: ['Running Shoe', 'Loafer', 'Sandal', 'Sneaker'] },
+    { c: 'Kids Wear', w: 12, p: [499, 1499], b: ['Little Hops'], n: ['Kids T-Shirt', 'Kids Frock', 'Kids Shorts'] },
+    { c: 'T-Shirts', w: 20, p: [399, 999], b: ['Urban Thread', 'Stride'], n: ['Polo T-Shirt', 'Round Neck Tee', 'Graphic Tee'] }
+  ];
+  const colours = ['Navy', 'White', 'Black', 'Olive', 'Maroon', 'Grey'];
+  const wsum = cats.reduce((s, c) => s + c.w, 0);
+  const pickCat = () => { let x = R() * wsum; for (const c of cats) { if ((x -= c.w) < 0) return c; } return cats[0]; };
+  cats.forEach((c, ci) => { c.items = c.n.flatMap((nm, i) => colours.slice(0, 3).map((col, j) => ({ name: `${nm} ${col}`, price: Math.round((c.p[0] + R() * (c.p[1] - c.p[0])) / 100) * 100 - 1, brand: c.b[(i + j) % c.b.length] }))); });
+
+  const end = todayS(), start = addMonths(end.slice(0, 8) + '01', -5);
+  const rows = []; const billNo = { MM: 4100, CM: 2300, HW: 900 };
+  for (let d = start; d <= end; d = addDays(d, 1)) {
+    const wd = weekday(d), month = +d.slice(5, 7);
+    const mult = (wd >= 5 ? 1.55 : wd === 0 ? 0.8 : 1) * ([10, 11].includes(month) ? 1.35 : 1) * (1 + daysBetween(start, d) / 1500);
+    for (const s of stores) {
+      const bills = Math.round((12 + R() * 8) * mult * s.f);
+      for (let b = 0; b < bills; b++) {
+        const no = s.code + (++billNo[s.code]);
+        const sp = pick(s.staff);
+        const cust = R() < 0.7 ? '98' + String(10000000 + Math.floor(R() * 3000)) : '';
+        const lines = 1 + (R() < 0.45 ? 1 : 0) + (R() < 0.15 ? 1 : 0);
+        for (let l = 0; l < lines; l++) {
+          const c = pickCat(), it = pick(c.items);
+          const qty = R() < 0.86 ? 1 : 2;
+          const gross = it.price * qty;
+          const rate = R() < 0.35 ? pick([0.1, 0.2, 0.3]) : 0;
+          const disc = Math.round(gross * rate);
+          rows.push([d, no, s.name, sp, cust, it.name, c.c, it.brand, qty, disc, gross - disc]);
+        }
+      }
+    }
+  }
+  const mid = addMonths(start, 3);
+  const parts = [rows.filter(r => r[0] < mid), rows.filter(r => r[0] >= mid)];
+  parts.forEach((part, i) => {
+    if (!part.length) return;
+    const from = part[0][0], to = part[part.length - 1][0];
+    const id = 'U' + (1000 + i);
+    DEMO.data.set(id, part);
+    DEMO.uploads.push({ id, fileName: `Wizapp_Sales_${MONTHS[+from.slice(5, 7) - 1]}-${MONTHS[+to.slice(5, 7) - 1]}_${to.slice(0, 4)}.xlsx`,
+      uploadedAt: `${to} 18:${pad(10 + i)}`, rows: part.length, dateFrom: from, dateTo: to,
+      totalAmount: round2(part.reduce((s, r) => s + r[10], 0)), status: 'ready' });
+  });
+}
+async function demoApi(action, p) {
+  await new Promise(r => setTimeout(r, 80));
+  const find = id => DEMO.uploads.find(u => u.id === id);
+  switch (action) {
+    case 'list': return { ok: true, uploads: DEMO.uploads.map(u => ({ ...u })) };
+    case 'data': return { ok: true, rows: DEMO.data.get(p.id) || [] };
+    case 'checkAdmin': return { ok: true };
+    case 'uploadStart': {
+      const id = 'U' + Date.now();
+      DEMO.uploads.push({ id, fileName: p.fileName, uploadedAt: nowStamp(), rows: 0, dateFrom: '', dateTo: '', totalAmount: 0, status: 'uploading' });
+      DEMO.data.set(id, []);
+      return { ok: true, id };
+    }
+    case 'uploadChunk': { const arr = DEMO.data.get(p.id); for (const r of p.rows) arr.push(r); return { ok: true }; }
+    case 'uploadFinish': Object.assign(find(p.id), { rows: p.rowCount, dateFrom: p.dateFrom, dateTo: p.dateTo, totalAmount: p.totalAmount, status: 'ready' }); return { ok: true };
+    case 'delete': DEMO.uploads = DEMO.uploads.filter(u => u.id !== p.id); DEMO.data.delete(p.id); return { ok: true };
+  }
+  return { ok: false, error: 'UNKNOWN_ACTION' };
+}
+
+/* ---------- wire up ---------- */
+function init() {
+  document.title = CONFIG.TITLE;
+  $('brandName').textContent = CONFIG.TITLE;
+  if (window.Chart) {
+    Chart.defaults.font.family = "'Barlow', system-ui, sans-serif";
+    Chart.defaults.font.size = 13;
+    Chart.defaults.color = '#5B6675';
+  }
+  if (S.demo) { $('demoNotice').hidden = false; buildDemo(); }
+
+  $('btnRefresh').addEventListener('click', loadData);
+  $('btnManage').addEventListener('click', openDrawer);
+  $('btnEmptyUpload').addEventListener('click', openDrawer);
+  $('btnClose').addEventListener('click', closeDrawer);
+  $('scrim').addEventListener('click', closeDrawer);
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && $('drawer').classList.contains('open') && !$('keyDlg').open) closeDrawer(); });
+
+  $('fPreset').addEventListener('change', () => { S.showAll = {}; render(); });
+  ['fFrom', 'fTo'].forEach(id => $(id).addEventListener('change', () => { $('fPreset').value = 'custom'; render(); }));
+  ['fStore', 'fSalesman', 'fCategory', 'fBrand', 'fSource'].forEach(id => $(id).addEventListener('change', () => { S.showAll = {}; render(); }));
+  const reset = () => {
+    $('fPreset').value = 'latest';
+    ['fStore', 'fSalesman', 'fCategory', 'fBrand', 'fSource'].forEach(id => { $(id).value = ''; });
+    S.showAll = {}; render();
+  };
+  $('btnReset').addEventListener('click', reset);
+  $('btnEmptyReset').addEventListener('click', reset);
+  $('btnExport').addEventListener('click', exportCsv);
+
+  $('granSeg').addEventListener('click', e => {
+    const b = e.target.closest('button[data-gran]');
+    if (!b) return;
+    S.trendGran = b.dataset.gran; render();
+  });
+  $('dash').addEventListener('click', e => {
+    const b = e.target.closest('[data-more]');
+    if (!b) return;
+    S.showAll[b.dataset.more] = !S.showAll[b.dataset.more]; render();
+  });
+
+  $('btnUnlock').addEventListener('click', unlock);
+  $('adminKey').addEventListener('keydown', e => { if (e.key === 'Enter') unlock(); });
+  $('btnLock').addEventListener('click', lock);
+  $('fileList').addEventListener('click', e => { const b = e.target.closest('[data-del]'); if (b) deleteFile(b.dataset.del); });
+
+  const dz = $('dropzone');
+  $('fileInput').addEventListener('change', e => onFile(e.target.files[0]));
+  dz.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $('fileInput').click(); } });
+  ['dragenter', 'dragover'].forEach(t => dz.addEventListener(t, e => { e.preventDefault(); dz.classList.add('drag'); }));
+  ['dragleave', 'drop'].forEach(t => dz.addEventListener(t, e => { e.preventDefault(); dz.classList.remove('drag'); }));
+  dz.addEventListener('drop', e => { const f = e.dataTransfer.files[0]; if (f) onFile(f); });
+
+  $('sheetSel').addEventListener('change', e => loadSheet(e.target.value));
+  $('headerSel').addEventListener('change', e => { S.up.headerRow = +e.target.value; applyHeader(); });
+  $('mapGrid').addEventListener('change', e => {
+    const s = e.target.closest('[data-map]');
+    if (!s) return;
+    S.up.map[s.dataset.map] = s.value === '' ? null : +s.value;
+    s.classList.toggle('unset', s.value === '');
+    renderPreview();
+  });
+  $('dateOrder').addEventListener('change', e => { S.up.dateOrder = e.target.value; renderPreview(); });
+  $('btnUpload').addEventListener('click', doUpload);
+
+  loadData();
+}
+init();
+</script>
+</body>
+</html>
